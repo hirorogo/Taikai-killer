@@ -107,6 +107,7 @@ README で未決だった点。**フォルダ構造で確定**。
 - **確定: Claude + Gemini の2つ、CLI を subprocess で駆動**（サブスク認証をそのまま利用）。codex/ollama/copilot は将来拡張（未実装は exit 2）。
 - runtime は **CLI subprocess 型**で統一（speca の HTTP `APIRunner` 階層はサブスク CLI には流用不可。CLI 用に別設計）。CLI は機械可読モード（`--output-format json`/stream-json 等）で叩き、装飾 stdout パースは禁止。各 subprocess に**ハード timeout** 必須、timeout kill 時は `status:"error"` partial を書いてから次へ。
 - フェーズ×モデルは config で手動指定。フォールバック順（落ちたら次モデル）も定義。
+- **フォールバック判定は OutcomeTracker（コードレベル統計）で持つ**（流用: SWE-Squad）。各 CLI dispatch 直後に `record({phase,agent,success,emptyResult,durationMs,error})`、agent ごと `consecutiveFailures>=3` で `isAgentHealthy=false`→そのフェーズの dispatch 対象から外し残モデルへ。状態は `outputs/{run}/AGENT_HEALTH.json`（状態DB禁止と整合）。LLM の都度判断でなくローリング統計で E_AGENT_CONFIG/E_LLM_COMM を発火。
 
 ### D5. レート/コスト制御ポリシー ✅確定
 - **確定: 予算上限は必須にしない。標準＝無制限**（README「レートリミットの続く限り無限でおこなう」と一致）。コスト上限は**任意で指定できる opt-in**。
@@ -114,7 +115,8 @@ README で未決だった点。**フォルダ構造で確定**。
   - **指定時**: `SCORING_RUBRIC.json` / 設定で `budget_usd`（result 単位 or 日次）を渡せる。超過で result を保存して通知し停止（`E_COST` / exit 64）。`cost_tracker` は常に**追跡はする**（指定が無くても可視化はする）が、**強制終了は上限指定時のみ**。
 - **②ratelimit 復帰戦略**: `E_RATELIMIT` は失敗にカウントせず、指数バックオフで待機→復活検知→resume。または別モデル（Claude↔Gemini）に切替。
 - **③暴走停止条件**: コストではなく **CB の3カウンタ**（連続失敗5 / 総リトライ20 / 連続空出力3 → exit 65）で止める（無制限運用でも暴走は止まる）。**ただし「非空だが無進捗」（score/rank が N ラウンド改善せず）も stall として検出する必要あり＝実装課題**。
-- ⚖️ **前提リスク（受任済み R2）**: サブスク CLI を無限ループ・並列 subprocess で叩くのは各社の自動化規約に抵触しうるが、リスク受任で進める（→ 受任リスク表 R2）。並列度・頻度の自主制限／従量課金API切替の余地は抽象に残す。
+- **④自己修復の段階化（流用: SWE-Squad）**: watchdog「止まったら叩く」を2段に分ける。**Tier1=LLM無しの機械修復**（orphan PID reconcile / log mtime stall→kill→resume / 破損 partial rm→batch粒度resume）。**Tier2=直らない時のみ LLM 自己改善**。**Tier2 の LLM 呼び出しは cooldown ロック必須**（`.taikai/locks/self_heal_llm.lock` の mtime で最短間隔強制）。これが無いと「LLM自己修復→また失敗→またLLM」がサブスク枠を焼く（R2 濫用に直結）。
+- ⚖️ **前提リスク（受任済み R2）**: サブスク CLI を無限ループ・並列 subprocess で叩くのは各社の自動化規約に抵触しうるが、リスク受任で進める（→ 受任リスク表 R2）。並列度・頻度の自主制限／従量課金API切替の余地は抽象に残す。自己修復の LLM cooldown ロック（D5④）はこの濫用を抑える具体策。
 
 ### D6. ヒューマンレビューゲートの実装 ✅確定
 - **確定: 非STOP・非同期承認**。STOP せず `質問.json` を Dashboard/bot に出し、回答が来たら resume で反映（README「後でも行える」に合致）。
@@ -127,6 +129,15 @@ README で未決だった点。**フォルダ構造で確定**。
 ### D8. 実行ホスト ✅確定（撤回）
 - **確定: 使い捨てホストは使わない。通常マシンで実行**（[execution-premise.md](./execution-premise.md)）。破壊前提・IaC再作成は撤回。破壊検知時は自動破棄せず通知＋停止、復旧は手動。
 - ⚖️ レビュー指摘（受任済み R4）: 通常マシンでサンドボックス無効＋S5 生成コード実行は自己破壊リスクだがリスク受任（→ 受任リスク表 R4）。任意緩和として S5 のみコンテナ隔離・`outputs/` バックアップは優先度が上がれば着手。
+
+### D22. S5 自己改善 = Reflexion ループ ✅確定（流用: faveos8758/reflexion-agent-ts, MIT [integrations](./integrations-issue1.md)）
+- **確定: S5 の自己改善はこの単一ループを唯一の正式契約とする。** `execute(CLI生成) → evaluator(テスト実行→{passed,reason}) → reflector(失敗理由→改善指示) → 改善プロンプトで retry`、`maxAttempts`（MVP=3）。
+  - steal A-1「同一プロンプト単純リトライ禁止・内容を変えて再生成」の**中身（reflector による失敗理由→改善指示）**を埋める実装契約。
+  - directory-structure の `prompts/S5_eval_optimizer.md` に残る**未定義「D21」番号は D22 に統合・改名**（evaluator-optimizer と Reflexion は S5 では同一ループの別名、二重契約にしない）。
+  - モデル呼び出しは **`runtimeRegistry.runCLISubprocess` を1 seam として共有**（ai/Vercel SDK 依存は持ち込まない。D4 と二重化させず実装メモ扱い）。
+  - `maxAttempts` 到達＝その item を `success:false` で partial に書いて次へ（局所スキップ）。CB（phase 横断）とは独立。`E_RATELIMIT` は attempt 失敗にカウントしない。
+  - **reflector は MVP 既定 = LLM**（品質確保）。rate 枯渇頻発時のみ config フラグで決定的テンプレ reflector に切替（reflector の CLI 呼び出しを省く opt-in 緩和）。
+  - 取込 MIT コードは `vendor/reflexion-agent-ts/` に元 LICENSE 同梱（本体は license 無しのまま）。
 
 ---
 

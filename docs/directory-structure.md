@@ -97,7 +97,7 @@ prompts/
 ├── S3_strategy_worker.md      # 戦略大量生成
 ├── S4_requirement_refine.md   # 要件精緻化
 ├── S5_codegen_worker.md       # コード生成（自己改善）
-├── S5_eval_optimizer.md       # evaluator-optimizer ループ（D21）
+├── S5_selfimprove.md          # S5 自己改善＝Reflexion ループ（D22。旧「D21 evaluator-optimizer」を統合改名）
 ├── S6_benchmark.md            # ベンチ評価
 ├── _self_improve.md           # 自己改善（presentation-agent 10/11 準拠）
 └── _template.md → templates/template.md（文体統一の単一ソース）

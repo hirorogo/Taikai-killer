@@ -96,6 +96,8 @@ flowchart LR
 - 各ワーカーは `<phase>_PARTIAL_W{worker}B{batch}_{timestamp}.json` を出力、下流は glob で消費。
 - 失敗検知（Circuit Breaker）・予算上限（Cost Tracker）・処理済みスキップ（Resume）を全フェーズ共有。
 - ratelimit 到達時は Circuit Breaker が待機→復活検知→再開（README「復活するまで待機して再開」）。
+- **CB は3イベントを区別する（流用: SWE-Squad）**: `recordResult(ok)` と別に **`recordSkip(reason)`**。`E_RATELIMIT`・冪等キーhit・親partial欠落の局所スキップ・best-so-far 打ち切りは全て `recordSkip` で**失敗率に加算しない**（「待機・スキップが多い無限ループ」で失敗率が偽膨張し誤トリップ→death spiral になるのを防ぐ）。
+- **watchdog は2段（流用: SWE-Squad）**: Tier1=LLM無しの機械修復（orphan reconcile / stall kill→resume / 破損partial rm）→ Tier2=直らない時のみ LLM 自己改善。**Tier2 の LLM 呼び出しは cooldown ロック必須**（`.taikai/locks/self_heal_llm.lock` mtime で最短間隔強制／R2 濫用防止・D5④）。
 
 ---
 
@@ -178,6 +180,26 @@ interface Strategy {
   // 「どの論文/知見/要件から出たか」は provenance.derived_from / source_ref に記録
 }
 
+// S5 コード生成（D22 Reflexion ループの1 attempt。PhaseArtifact<CodeAttempt> payload）
+// outputs/{run}/partials/S5_PARTIAL_W{w}B{b}_{ISO8601}.json に attempt 確定ごとに1ファイル append-write
+interface CodeAttempt {
+  attempt: number;
+  code_ref: string;            // 生成コードの保存パス（本体は別ファイル、partial は参照のみ＝slim）
+  passed_anchor_ids: string[]; // これまで通過したテストID集合（回帰ガードの対象）
+  newly_passed_ids: string[];  // この修正で新規通過（空=進捗ゼロ→stall 判定に使う）
+  regressed: boolean;          // 既通過を壊したか→true なら revert 済み
+  reverted_to?: number;        // 退行時に戻った attempt 番号
+  distance?: number;           // graded distance（MVPは予約のみ・S6/進化段で実装）
+}
+// S5 の最終結果（Reflexion 系列をプロバナンス化＝D17 と一体、新ファイル無し）
+interface CodegenResult {
+  strategy_id: string;
+  passed: boolean;
+  attempts: number;            // 何回で通った/諦めた
+  feedbackHistory: string[];   // 各試行の reflector フィードバック（why-retry の証跡）
+  finalFeedback?: string;      // 失敗時の最後の教訓
+}
+
 // S6 ベンチマーク（README: 6.result.json）
 interface BenchResult {
   result_id: string;        // 1 result = S1..S6 の1周
@@ -186,6 +208,8 @@ interface BenchResult {
   score: number;
   rank: number;             // 現在1位 など
   metrics: Record<string, number>;
+  passed_test_ratio: number; // 最小スコアの一次指標
+  distance?: number;        // graded distance（direction:min 指標／MVPは予約のみ）
   diff_vs_prev?: number;    // 対照実験の定量差
   threshold: { name: string; value: number }[]; // 閾値・遺伝子セッション
 }
@@ -203,11 +227,11 @@ interface BenchResult {
 |---|---|---|
 | `E_INPUT` | フェーズ入力 JSON 欠落 / スキーマ不一致 | 当該ワーカーを `status:"error"` で記録しスキップ、他ワーカーは継続 |
 | `E_AGENT_CONFIG` | CLI 未認証 / モデル未到達 | そのエージェントを dispatch 対象から除外、残モデルで続行 |
-| `E_LLM_COMM` | CLI 失敗 / stdout JSON 不正 / タイムアウト | リトライ→Circuit Breaker が遮断（`status:"error"` partial を書いてから次へ） |
-| `E_RATELIMIT` | レート上限 | 待機→復活検知→Resume で再開（停止しない。CB の失敗にカウントしない） |
+| `E_LLM_COMM` | CLI 失敗 / stdout JSON 不正 / タイムアウト / **returncode 0 だが実質空**（JSON payload 空・必須欠落かつ成果物未生成） | リトライ→CB が遮断（`status:"error"` partial を書いてから次へ）。**exit 0 を盲信しない**（サブスクCLIはエラー時も0で空を返す）。空出力は `consecutive_empty_results` を+1（流用: SWE-Squad） |
+| `E_RATELIMIT` | レート上限 | 待機→復活検知→Resume で再開（停止しない。CB の失敗でなく `recordSkip` 扱い） |
 | `E_COST` | `budget_usd` 指定時の予算上限到達 | フェーズ停止（**exit 64**）、result を保存して通知。未指定なら発火しない |
 | `E_CRAWL` | クロール失敗 / 広告・不適切 | 当該URLを除外（`excluded`）、MCP不安定時は built-in(fetch)へフォールバック、ワード改善ループへ |
-| `E_CODE_TEST` | 生成コードがテスト不通過 | 自己改善プロンプトで再生成（同一プロンプト単純リトライ禁止）、通すまで継続 |
+| `E_CODE_TEST` | 生成コードがテスト不通過 | **D22 Reflexion ループ**で自己改善再生成（A-1 の具体化＝失敗 input/expected/actual を全文注入し構造化 `fixed_code` 受領→`tsc --noEmit` 検証）。**修正適用後は既通過 `passed_anchor_ids` を必ず再実行し、退行したら直前解に revert＝単調改善を強制**（流用: AlphaCodium）。1試行内は config 駆動の有限キャップで打ち切り **best-so-far を返す**（失敗でなく `recordSkip`。ただし無進捗=`newly_passed` 空の打ち切り連続は D5③ stall でカウント） |
 | `E_HOST` | ホスト汚染/破壊検知 | **通常マシン運用のため自動破棄はしない**。検知して通知＋停止、復旧は手動（IaC再作成は任意） |
 
 > 思想: **単一ワーカーの失敗でループを止めない**。失敗は JSON に記録して局所スキップし、
