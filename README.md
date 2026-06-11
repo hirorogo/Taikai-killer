@@ -1,133 +1,184 @@
-# Taikai-killer
+<p align="center">
+  <img src="https://img.shields.io/badge/TypeScript-Orchestrator-3178c6?logo=typescript&logoColor=white" alt="TypeScript">
+  <img src="https://img.shields.io/badge/Python-Crawl_Sidecar-3776ab?logo=python&logoColor=white" alt="Python sidecar">
+  <img src="https://img.shields.io/badge/Claude-CLI-d97757?logo=anthropic&logoColor=white" alt="Claude CLI">
+  <img src="https://img.shields.io/badge/Gemini-CLI-4285f4?logo=google&logoColor=white" alt="Gemini CLI">
+  <img src="https://img.shields.io/badge/status-design_phase-yellow" alt="Design phase">
+</p>
 
-> **注**: 以下は初期構想（ブレインストーミング）。**設計の正は [`docs/`](./docs/README.md)** で、確定事項は [docs/decisions.md](./docs/decisions.md) の「ヒアリング確定」が最上位。
-> 2026-06-11 時点の確定: スタック= **TypeScript/Node**（Scrapling のみ Python サイドカー）、モデル= **Claude + Gemini（サブスク・CLI subprocess）**、実行= **通常マシン・サンドボックス無効**。
-> ⚠️ 以下の本文に残る「Gemini/Copilot/Claude/Codex/Ollama」「スタック未定」等は構想当時の表現で、上記確定が優先。
-> ⚖️ 受任済みリスク（[decisions.md の受任リスク表](./docs/decisions.md)参照）: 対象大会の出場資格(R1)・サブスクCLI自動化の規約(R2)・提出の可否(R3)・通常マシン実行(R4) は**承知の上で受任**して進める。
+<h1 align="center">Taikai-killer</h1>
 
-## auto 大会killer ハーネス設計
+<p align="center">
+  <strong>大会で勝つために、寝ている間も戦略を進化させ続ける自律 AI ハーネス</strong>
+</p>
 
-### 目的
+<p align="center">
+  大会要項を渡すと、要件抽出 → 外部知見収集 → 戦略立案 → コード生成 → 評価 を<br>
+  レート枯渇まで無限ループで回し、結果をフィードバックに戦略を世代交代させ続ける。
+</p>
 
-- 自立し、自動で AI が要件定義・コード生成・コードレビュー・ベンチマーク・閾値調整を自動で行う
-- レートリミットの続く限り無限で行う
-- AI ハッカソンや大会向けのパイプライン
-- AI が外部文献を参照するようにする
-- 論文で論じられているハーネスを参考にし、パイプラインに組み込み設計を行う
-- Slack や Discord の bot、web dashboard を用いて UI 上で確認できるパイプラインとする
-- 学術的であり、再現性を持たせるのが最終目標とする
+<p align="center">
+  Built on
+  <a href="https://github.com/NyxFoundation/speca">speca</a> (orchestrator) &bull;
+  <a href="https://github.com/Codium-ai/AlphaCodium">AlphaCodium</a> (test-anchored flow) &bull;
+  <a href="https://github.com/faveos8758/reflexion-agent-ts">Reflexion</a> (self-improve) &bull;
+  <a href="https://github.com/google-deepmind/funsearch">FunSearch</a> (evolution)
+</p>
 
-### 案（これからまとめる。スタックは未定）
-
-1. オーケストレーション
-2. git の管理ルールを明確化
-3. branch を切るか → project フォルダなどを作ってフォルダ構造で管理するほうが同時作業に有利か、を検討
-4. AI が止まるのを検知して自動で叩くようにする
-5. ratelimit が来たら復活するまで待機し、復活したら再開できるようにする（指定時間まで繰り返す）
-6. フェーズ途中やそれぞれで json を出力する
-   - 例：管理画面などで md で結果を表示。「戦略 1 まるまるアプローチ……結果、現在 1 位」「戦略 2」……など
-7. ネタ帳から引っ張れるようにする（後述パイプライン）
-8. 外的知見をクロールする
-9. 遺伝子学習で最適化
-10. このプロジェクトはそれぞれエージェントの集合とする
-11. `template.md` で文体を一致させる
-12. 人間の役割を代替させる Claude（パイプラインに投入したりタスクを入れたりする AI）を整備
-13. ベンチの結果などで「相性的にこちらのほうがよかった」などを、後述するベンチマークセッションで言及する
-14. スライド生成は nyx foundation のフレームワークを参考にする
-15. 全体パイプラインは speca を参考にする
-16. 複数戦略の統廃合
-17. issue か web ダッシュボードで報告
-18. ハーネス
-19. Gemini / Copilot / Claude / Codex / Ollama に対応させる
-20. benchmark / output / docs / template / Claude prompt など、フレームワーク全体のフォルダ構成は定義しておく
-21. ハッカソンにも将来的に対応させたいが、第一目的はシンギュラリティバトルクエスト大会やほかの大会で全部門優勝するためのもの
+> [!NOTE]
+> **これは設計フェーズのリポジトリです。** 実装の正は [`docs/`](./docs/README.md)、確定事項は [docs/decisions.md](./docs/decisions.md)。
+> シンギュラリティバトルクエスト＋ハッカソンを狙う。前提リスク（出場資格 R1・サブスク自動化規約 R2・全自動提出 R3・通常マシン実行 R4）は[受任済み](./docs/decisions.md)。
 
 ---
 
-## セッション案（ヒューマンレビュー必須 1 回の見回しを想定）
+## Overview
 
-### 1. 要件定義・大会ルール定義セッション
+Taikai-killer は**1回だけのブートストラップ S1 ＋ 無限ループ S2〜S6** で動く自律パイプライン：
 
-1. **1a** 大会公式文章の URL を投入
-2. **1b** json ファイルに保存を行う。URL は後述するクロール用 Python を使う。それでも無理な場合はユーザからの入力を求める
-3. **1c** 必須条件・要件を抽出
-4. **1d** ルール上きわどいもの・定義上微妙なところを思考する。`質問.json` / `定義.json` / `題材.json` とする
-5. **1e** 質問への返答やユーザの入力を待つ。これはダッシュボード上や後でも行えるものとする
+1. **S1 要件定義** — 大会ルールを抽出し、評価指標 `SCORING_RUBRIC.json` を**大会から導出**（一度きり）
+2. **S2 外部知見** — 検索ワード生成 → クロール（論文は Semantic Scholar API）。最大4回 or 新規率<10%で早期終了
+3. **S3 戦略生成** — 要件・知見・論文・ライバル予測から戦略を大量生成
+4. **S4 要件精緻化** — 戦略ごとに要件を詰める
+5. **S5 コード生成** — 戦略を実装し、テストを通すまで自己改善（Reflexion ループ）
+6. **S6 ベンチマーク** — ルブリックで採点 → `result.json`。これを S2 に再投入して次の周回へ
 
-大まかな枠組みでディレクトリ構造を確定させる。
-ヒューマンレビューを前提とし STOP する（しないモードも考慮する）。
+1周 = 1 result。`result.json` をフィードバックに戦略を進化させ、レート枯渇まで回り続ける。
 
-### 2. 外部知見セッション
+### 構成（2 codebase ＋ サイドカー）
 
-1. **2a** Python のスクレイプライブラリを用いる：https://github.com/D4Vinci/Scrapling
-2. **2a** MS browser を用いる：https://github.com/microsoft/playwright-mcp
-   （要検討段階。スクレイプは別のものを用いるべきかもしれない）
-3. **2b** 1e などで出力された json・大会 URL などで検索ワードを大量に列挙する → `検索ワード.json`
-4. **2b** 検索ワードの英語的アプローチを行う
-5. **2c** その json を見て検索を行い、得られたサイトを大量に `urlクロール.json` として保存
-6. **2d** URL にサブエージェントを介し大量にアクセスし、文章の内容をすべて output フォルダの中にコピーする
-7. **2d** 広告や明らかに不適切なものを除外する
-8. **2α** arXiv も「2 の例外」として同様に操作し抽出を行う。そのほかの論文サイトも行う。論文サイトは論文サイト向け検索ワードを列挙すること
-   - 論文はハーネス・その分野であれば何でもよい
-9. **2d** ワード改善ループを行い、ある程度までデータをためる
-10. 各フェーズ後に json を保存
+| レイヤ | 言語 | 役割 |
+|---|---|---|
+| **Orchestrator** | TypeScript | フェーズ実行・並列ワーカー・resume・暴走/コスト制御（speca を移植） |
+| **Dashboard** | TypeScript (React/Vite) | run 監視・結果可視化・ヒューマンレビュー承認（speca web/ を vendor） |
+| **Crawl sidecar** | Python | Scrapling による外部知見クロール（TS から subprocess） |
 
-### 3. 戦略セッション
+### Key Capabilities
 
-各セッションで抽出した情報をもとに戦略を洗い出すフェーズ。
+- **サブスク CLI 駆動** — Claude / Gemini の CLI を subprocess で叩く（従量課金なし）。フェーズ×モデルは config で指定
+- **Partial = 唯一の真実源** — フェーズ間は中間 JSON 契約。Resume はディレクトリ glob だけ（状態 DB を持たない）
+- **来歴(provenance)チェーン** — 全レコードが親 ID と元ソースを持ち、`result.json` から大会ルールまで JSON だけで遡れる
+- **安全ガード（隔離の代わり）** — Circuit Breaker（`recordSkip` で待機を失敗に数えない）・2段自己修復（LLM cooldown）・コスト追跡
+- **自己改善（D22 Reflexion）** — execute → evaluate → reflect → retry。テストアンカー回帰ガードで単調改善を強制
+- **2トラック進化** — 数値（閾値/パラメータ）は LLM 不要のコードで最適化、構造（approach）は LLM が変異
+- **学術的再現性** — 全 prompt/schema/親 partial の hash を固定、手続き的再現を担保
 
-1. 要件定義に従い戦略を大量に出す
-2. 2 の result をもとに大量に出す
-3. 2 の論文 ver で大量に出す
-4. 大まかなルールなしの `題材.json` で出す
-5. 大会で去年があるのならライバルを予測して出す
-6. Discord / Slack や人間が入れるネタ帳から出す
+---
 
-- レートリミットなど考えず、できる限り出す
-- Gemini / Codex / Ollama / Copilot / Claude など様々なエージェントに立ててもらう
-- それぞれ分類して output に保存
-7. 被り・類似戦略を統合
+## Architecture
 
-### 4. 要件定義セッション
+```mermaid
+flowchart TD
+    subgraph ctrl [" Orchestrator (TypeScript) "]
+        Runner["Phase Runner\nrunPhase.ts"]
+        CB["Circuit Breaker\nrecordResult / recordSkip"]
+        WD["Watchdog\nTier1 機械修復 / Tier2 LLM"]
+        Resume["Resume\npartial glob スキャン"]
+        Runner --- CB & WD & Resume
+    end
 
-- 1 の生成 JSON
-- 3 の戦略どおりに
+    subgraph boot [" Bootstrap (1回のみ) "]
+        S1["S1 要件定義\n→ SCORING_RUBRIC.json"]
+    end
 
-要件が出せるようにぐるぐる回す。
-戦略ごとに出せるようにする。
-戦略ごとでもフォルダ構成が使い回されるものを作り、それを流用する。
-ここもハーネスでぶん回す。
-不変式を与え、コードのあるべき姿を定義までしておく。
+    subgraph loop [" Infinite Loop — rate枯渇まで (S2..S6) "]
+        S2["S2 外部知見"] --> S3["S3 戦略生成"] --> S4["S4 要件精緻化"] --> S5["S5 コード生成\nReflexion ループ"] --> S6["S6 ベンチマーク"]
+        S6 -->|"result.json 再投入"| S2
+    end
+    S1 --> S2
 
-### 5. コード生成セッション
+    subgraph agents [" Models (CLI subprocess) "]
+        Claude["Claude CLI"]
+        Gemini["Gemini CLI"]
+    end
 
-要件定義を出す。
+    subgraph io [" State / IO "]
+        Store[("outputs/{run}/\npartials + events + result")]
+        Dash["Dashboard\nレビュー承認 / 通知"]
+    end
 
-1. **5a** どれがどれに対応しているか、要件定義・実装済みか・戦略を紐付ける
-   - json どおりに実装させる。自己改善系のプロンプトで行う
-   - マルチエージェント・オーケストレーションで並行実装する
-2. **5b** テストケースを通す
-3. **5c** 実際にエラーが起きないか確かめる。通すまで続ける
+    Runner -->|"初回起動"| boot
+    Runner -->|"フェーズ起動"| loop
+    loop <-->|"dispatch"| agents
+    loop <-->|"read/write"| Store
+    S1 -.->|"質問.json"| Dash
 
-### 6. ベンチマークセッション
+    classDef ctrlNode fill:#6366f1,stroke:#4338ca,color:#fff,stroke-width:2px
+    classDef bootNode fill:#f59e0b,stroke:#d97706,color:#fff,stroke-width:2px
+    classDef loopNode fill:#3b82f6,stroke:#2563eb,color:#fff,stroke-width:1.5px
+    classDef agentNode fill:#ef4444,stroke:#dc2626,color:#fff,stroke-width:1.5px
+    classDef ioNode fill:#10b981,stroke:#059669,color:#fff,stroke-width:2px
+    classDef box fill:transparent,stroke:#e5e7eb,stroke-width:1px,color:#6b7280
 
-- 未定。変化できるフェーズ 1 で自動生成？
-- フレームワークとして決め、そのやり方で定義する
-- 分析のときにベンチマークがどうかを判断する
-- 戦わせる？ モデル推しで相性を変化させる？
-- **6 `result.json`**（レポートを出す）
+    class Runner,CB,WD,Resume ctrlNode
+    class S1 bootNode
+    class S2,S3,S4,S5,S6 loopNode
+    class Claude,Gemini agentNode
+    class Store,Dash ioNode
+    class ctrl,boot,loop,agents,io box
+```
 
-ここまでを 1 result とし、これを無限に回すことを予定。
+### セッションの進み方
 
-- 結果分析
-- しきい値・遺伝子セッション
-- 改善案を、結果の対照実験で定量的に評価
-- 結果を見て 2〜5 の json を input してパイプラインを動かさせる
-- 戦略の比較結果を json に保存
-- 統合戦略
-- ベンチマークの結果を見て、ベンチマークを変えるべきか判断する（変化を保存する）
-- 全てのフェーズで結果を保存
-- 現時点での最強を生成
-- 他戦略・モデルとの統合？
-- AI 同士を戦わせる
-- 将来的に nyx のプレゼンツールを導入
+```
+S1(一度きり) ─▶ S2 ─▶ S3 ─▶ S4 ─▶ S5 ─▶ S6 ─▶ result.json ─┐
+                ▲                                              │
+                └──────────── 次の周回へ再投入 ────────────────┘
+```
+
+各周回は前回 `result.json` を見て前進：高得点の戦略を残し、進化させ、統合する。停止はレート枯渇・予算上限・暴走停止(CB)・ヒューマンレビューのみ。
+
+---
+
+## How the S5 Self-Improve Loop Works（D22 Reflexion）
+
+```mermaid
+flowchart TD
+    Start(["戦略を実装"]):::startNode --> Gen["execute\nCLI でコード生成"]:::genNode
+    Gen --> Test{"テスト\n通過?"}:::testNode
+    Test -->|"通過"| Anchor["既通過テストを再実行\n(回帰ガード)"]:::okNode
+    Anchor -->|"退行なし"| Done(["success\nresult.json へ"]):::doneNode
+    Anchor -->|"退行した"| Revert["直前解に revert\n単調改善を強制"]:::revertNode
+    Test -->|"不通過"| Reflect["reflect\n失敗理由→改善指示"]:::reflectNode
+    Revert --> Reflect
+    Reflect --> Cap{"maxAttempts\n到達?"}:::capNode
+    Cap -->|"未到達"| Gen
+    Cap -->|"到達"| Best(["best-so-far を返す\n(recordSkip)"]):::bestNode
+
+    classDef startNode fill:#6366f1,stroke:#4338ca,color:#fff
+    classDef genNode fill:#3b82f6,stroke:#2563eb,color:#fff
+    classDef testNode fill:#f59e0b,stroke:#d97706,color:#fff
+    classDef okNode fill:#10b981,stroke:#059669,color:#fff
+    classDef reflectNode fill:#8b5cf6,stroke:#7c3aed,color:#fff
+    classDef revertNode fill:#ef4444,stroke:#dc2626,color:#fff
+    classDef capNode fill:#f59e0b,stroke:#d97706,color:#fff
+    classDef doneNode fill:#059669,stroke:#047857,color:#fff
+    classDef bestNode fill:#6b7280,stroke:#4b5563,color:#fff
+```
+
+- **失敗理由を全文注入**して再生成（盲目的リトライ禁止）。修正は構造化出力で受け `tsc --noEmit` 検証
+- **テストを書く者 ≠ コードを書く者**。テストは S5 開始時に sha256 凍結、S6 が再ハッシュ検証（報酬ハック対策）
+
+---
+
+## Status / Roadmap
+
+- ✅ **設計確定**：パイプライン全体・データ契約・オーケストレータ・受任リスク（[decisions.md](./docs/decisions.md)）
+- ✅ **縦串MVP仕様**：1大会で1result出す最小経路を定義（[mvp-vertical-slice.md](./docs/mvp-vertical-slice.md)）
+- 🔧 **実装中（未）**：`orchestrator/` TS 移植・`schemas/*.json` 実体化・縦串のコード化・dashboard server の TS 化
+- 🔜 **次スコープ**：進化(island)・監査ハッシュチェーン・提出物 attestation・presentation 生成
+
+## Docs
+
+| ドキュメント | 内容 |
+|---|---|
+| [docs/README.md](./docs/README.md) | 設計の単一ソース・目次 |
+| [architecture.md](./docs/architecture.md) | 全体図・データ契約・エラー経路 |
+| [directory-structure.md](./docs/directory-structure.md) | 確定ディレクトリ構成 |
+| [decisions.md](./docs/decisions.md) | 設計判断（L1-L9 / D1-D22 / 受任リスク R1-R4） |
+| [mvp-vertical-slice.md](./docs/mvp-vertical-slice.md) | 縦串MVP仕様（致命的欠落を全部埋めた） |
+| [steal-from-speca.md](./docs/steal-from-speca.md) / [integrations-issue1.md](./docs/integrations-issue1.md) | 外部OSSからの流用パターン |
+| [execution-premise.md](./docs/execution-premise.md) / [troubleshooting.md](./docs/troubleshooting.md) | 実行前提・運用 Runbook |
+
+---
+
+<p align="center"><sub>設計の正は <code>docs/</code>。本 README は概観であり、矛盾時は docs/decisions.md を優先。</sub></p>
