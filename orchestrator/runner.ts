@@ -17,7 +17,8 @@ import { join, relative } from "node:path";
 import { runCLISubprocess } from "./runtimeRegistry.ts";
 import { MVP_PHASES } from "./config.ts";
 import { notify } from "./notify.ts";
-import { pipelineStarted, phaseCompleted } from "./events.ts";
+import { pipelineStarted, phaseStarted, phaseCompleted } from "./events.ts";
+import { archiveRun } from "./archiver.ts";
 import { CircuitBreaker } from "./circuitBreaker.ts";
 import { dedupStrategies } from "./collector.ts";
 import { validateArtifact } from "./validate.ts";
@@ -211,6 +212,7 @@ export async function runSlice(runDir: string): Promise<void> {
   }
 
   // ── S3 戦略生成（cold-start: requirement/subject のみ）──
+  phaseStarted(runDir, "S3");
   console.log("[S3] 戦略生成…");
   const s3Prompt = `${readFileSync(MVP_PHASES["S3"]!.promptPath, "utf8")}
 
@@ -267,6 +269,7 @@ Strategy[] の JSON だけを出力（id/origin/approach）。origin は "requir
   phaseCompleted(runDir, "S3", "ok");
 
   // ── S5 コード生成（D22 Reflexion ループ）──
+  phaseStarted(runDir, "S5");
   console.log("[S5] D22 ループ…");
   const cb = new CircuitBreaker();
   const projDir = join(runDir, "projects", strategy.id);
@@ -390,6 +393,7 @@ ${strategy.approach}
   phaseCompleted(runDir, "S5", passed ? "ok" : "partial");
 
   // ── S6 ベンチマーク（test型 / 改変検知）──
+  phaseStarted(runDir, "S6");
   console.log("[S6] 採点…");
   const testNow = hashDir(projTests);
   if (testNow !== testFrozen) {
@@ -429,6 +433,8 @@ ${strategy.approach}
   });
   const bk = backupResult(runDir); // 欠落6: TAIKAI_BACKUP_DIR があれば成果物を複製
   if (bk.backedUp) console.log(`[backup] ${bk.copied.length} 件複製`);
+  const arch = archiveRun(runDir); // run アーカイブ・マニフェスト（sha256）
+  writeJson(join(runDir, "archive_manifest.json"), arch);
   await notify(runDir, { type: "run_complete", passed, ratio, strategy: strategy.id });
   console.log(`[done] passed=${passed} ratio=${ratio}`);
 }
