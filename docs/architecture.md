@@ -16,7 +16,7 @@
 | Agents | **claude / gemini**（CLI subprocess、サブスク認証）。codex/ollama/copilot は将来拡張 | 各フェーズの実作業ワーカー |
 | Data Contract | JSON Schema（`schemas/`） | フェーズ間の型付き受け渡し |
 | External Knowledge | Scrapling（Python サイドカー）/ Playwright(TS) / fetch | クロール・スクレイプ |
-| Optimization | 進化的探索（まず単一プール→island／FunSearch 系） | 戦略・閾値の最適化 |
+| Optimization | 2トラック: ①数値最適化=LLM不要（GA/ヒルクライムをコードで回す）②構造変異=LLM（S5生成） | 閾値/パラメータ=① / approach=② |
 | Dashboard | speca web/ を vendor（FastAPI→TS 書換中 + React/Vite）+ Slack/Discord bot | 状態確認・ヒューマンレビュー入力 |
 | Presentation | presentation-agent（Slidev、後で vendor） | 発表資料の自律生成 |
 | Host | **通常マシン**（隔離なし・サンドボックス無効・リスク受容） | 実行基盤 |

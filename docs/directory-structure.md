@@ -184,10 +184,15 @@ projects/                       # 戦略ごとに独立フォルダ（branch で
 
 evolution/                      # 遺伝子セッション（D18）★初期スコープ外（run数が増えてから）
 ├── pool.json                   # まず単一プール（戦略JSONの配列）で開始
+├── numericOptimizer.ts         # ★①数値最適化＝LLM不要。閾値/パラメータ/重みを GA/ヒルクライム等で回す
 └── config.ts                   # 進化ハイパラ（island化は後追い。island/移住周期は将来）
 ```
 
-> **D18 注**: 初期は **単一プール（`pool.json`）のみ**。island/program_db/移住は run 数が3桁規模になってから（評価器 D3 が固まるのが前提＝**評価器確定まで進化は起動しない**）。
+> **D18 注（2トラック分離）**:
+> - **① 数値最適化トラック（LLM不要）**: 閾値・パラメータ・重み（例: じゃんけんAIの出す確率）は **`numericOptimizer.ts` が普通のコードで回す**（GA/ヒルクライム/CMA-ES 等）。**S6 評価関数を呼んでスコア→数値を変異→繰り返す**だけで、LLM は一切呼ばない。決定的（seed固定可→再現性◎）・無料・高速で、LLM進化なら数十回のところを数万回回せる。数値変更は **AI 以外の要因（最適化アルゴリズム）で起こる**。
+> - **② 構造変異トラック（LLM）**: approach・アルゴリズム自体の質的飛躍は **S5 が LLM で生成**（FunSearch/AlphaEvolve 型）。
+> - 前提: ①は「**評価関数が LLM 抜きで速く呼べる**」こと（生成済みプログラムを実行してスコアを返すだけ）。
+> - 初期は **単一プール（`pool.json`）のみ**。island/program_db/移住は run 数が3桁規模になってから（**評価器 D3 が固まるのが前提＝評価器確定まで進化は起動しない**）。
 
 - **worktree 運用（D13）**: `projects/{strategy_id}/` を git worktree に割り当てる場合、共有 `.git` への commit は orchestrator のミューテックスで直列化、`index.lock` は retry-backoff。**初回 run では不要（∞並行が走ってから）**。
 
