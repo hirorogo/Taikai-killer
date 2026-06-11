@@ -17,6 +17,7 @@ Taikai-killer のフォルダ構成を、nyx foundation の実プロジェクト
 2. **フェーズ間 JSON Schema 契約** — `schemas/` に「データ型 / `Phase*Partial` / `*Event` / `RunManifest`」の3+1層（D2/D9 を満たす）
 3. **orchestrator を独立パッケージ化** — runner/queue/batch/collector/factory/resume/watchdog/config/paths（D11/D13/D14）
 4. **run 単位の outputs ディレクトリ** — `outputs/{ISO8601}-{commit}-{tournament}/` に成果物・ログ・提出物を隔離（D9/D15/D17）
+5. **評価ルブリックの外部化（大会非依存）** — 大会固有の評価軸・配点・ルールはコードに埋めず `TOURNAMENT_INFO.json`/`SCORING_RUBRIC.json`/`定義.json`/`題材.json` から注入。ハーネス本体を別大会に転用可能に保つ（speca `BUG_BOUNTY_SCOPE.json` 流用 / [steal-from-speca.md](./steal-from-speca.md) E-1）
 
 スタック: **Python + uv**（speca と同じ `pyproject.toml`/`uv.lock`）をコアに、CLI/Dashboard は Node、発表は Slidev（presentation-agent を vendor）。
 
@@ -99,7 +100,9 @@ prompts/
 └── _template.md → templates/template.md（文体統一の単一ソース）
 ```
 
-- **版管理（D20）**: 各 prompt は**イミュータブル**。改訂は `prompts/.versions/<name>@<hash>.md` に退避し、実行ログに版IDを刻む。
+- **版管理（D20 / steal E-4）**: 各 prompt は**イミュータブル**。自己改善ループの成果は `prompts/locked/<phase>/v{n}.md`＋`manifest.json`（baseline/improved スコア・コスト・seed・dataset_hash を記録＝プロバナンス完全保全）に固定。`config.py` の `prompt_override_path`＋`--locked` で baseline⇄改善版を切替。
+- **共通テンプレ（steal C-2）**: 全 prompt は `<task>`（IO契約）＋`<critical_requirements>`（譲れない条件、例「**スキップ時も出力ファイルは必ず書く**」=partial-first 成立の必須要件）構造で固定。`template.md` で全プロバイダ同一文体を強制。
+- **ツール許可（steal C-3）**: フェーズ別にツール許可を絞る＝「集中力ガード」（権限でなく推論品質のため。S3 に Bash を渡さない等）。
 
 ---
 
@@ -142,18 +145,27 @@ schemas/
 speca の実物 `outputs/2026-05-13T14-36-26Z-8802b47-openlist/` 形式をそのまま採用。
 
 ```
-outputs/                              # .gitignore
+outputs/                              # .gitignore（*.png/*.md だけ allowlist）
 └── {ISO8601}-{commit}-{tournament}/  # 1 run = S1 once → (S2..S6)*∞
+    ├── TOURNAMENT_INFO.json   # ★最小入力: 大会の識別（名前/URL/締切/言語/制約）E-1
+    ├── SCORING_RUBRIC.json    # ★最小入力: 評価軸/配点/禁止事項（ルブリック外部化）E-1
     ├── events/        # append-only イベントログ（D9）
     ├── partials/      # S{n}_PARTIAL_W{w}B{b}_{ts}.json（D2）
     ├── logs/          # ワーカー別 trajectory（agent_id 付き / D15）
     ├── graphs/        # 戦略系統・進化系統図
     ├── submitted/     # 大会提出物（speca: submitted/）
-    ├── run_manifest.json   # 再現性マニフェスト（D17）
+    ├── run_manifest.json   # 不変メタ＝再現性マニフェスト（D17）
     └── result.json    # S6 レポート
+
+.taikai/                   # ★可変状態（成果物と分離 / steal E-2）— .gitignore
+└── runs/{id}/
+    └── state.json         # status / owner_pid / cancel_requested / budget（orphan検出用）
+~/.taikai/runtime.json     # ユーザ永続選好（秘密は入れない＝環境変数のみ）
 ```
 
 - **命名規約（確定）**: partial = `S{n}_PARTIAL_W{worker}B{batch}_{ISO8601}.json`、run dir = `{ISO8601}-{git短縮hash}-{大会slug}`。
+- **状態3系統分離（E-2）**: `outputs/{run}/`（成果物・不変）／`.taikai/runs/{id}/state.json`（supervisor可変状態・`owner_pid` で orphan 検出）／`~/.taikai/runtime.json`（永続選好）。**APIキーは設定に保存せず環境変数から読む**。
+- **Release 保全（E-6）**: 大容量生データ（evolution/islands・trajectory）は Git でなく GitHub Release に zstd tarball、repo は系統図/result.md だけ allowlist。タグ `taikai-{tournament}-{date}-{strategy_id}`、sidecar manifest（sha256）で復元検証。
 
 ---
 
