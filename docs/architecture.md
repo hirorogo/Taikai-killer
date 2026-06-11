@@ -109,6 +109,7 @@ flowchart TD
   S1[S1 要件定義] --> Q[質問.json]
   S1 --> DEF[定義.json]
   S1 --> SUB[題材.json]
+  S1 --> RUB[SCORING_RUBRIC.json<br/>★評価指標は大会ルールから導出]
   Q --> HR[Human Review] --> S1
 
   DEF & SUB --> S2[S2 外部知見]
@@ -122,47 +123,68 @@ flowchart TD
   STR --> S4[S4 要件精緻化] --> REQ[要件定義_*.json]
   REQ --> S5[S5 コード生成] --> CODE[実装 + テスト結果]
   CODE --> S6[S6 ベンチマーク] --> RES[result.json]
+  RUB -->|rubric_ref で参照| S6
   RES -->|戦略比較/統合/閾値更新| S3
 ```
+
+> **来歴(provenance)**: 上の各 `*.json` は全レコードに `provenance.derived_from`（親レコードID）と `source_ref`（実ソースURL/論文/ファイル）を持つ。下流(result.json)から上流(大会ルール・元論文URL)まで JSON だけで遡れる（データ契約参照）。
 
 ---
 
 ## 主なデータ契約
 
 ```ts
+// ★来歴(provenance) — 全レコードが「どこから来たか」を持つ。フェーズを跨いで辿れる。
+interface Provenance {
+  produced_by: string;        // 生成したフェーズ "S3" / worker など
+  agent?: "claude" | "gemini" | "codex" | "ollama" | "copilot";
+  prompt_version?: string;    // どの prompt 版で生成したか（D20）
+  derived_from: string[];     // ★親レコードの id（上流の Strategy/CrawledUrl/Requirement…）
+  source_ref?: string;        // 元ソースの実体（URL / 論文arXiv id / ファイルパス / 人間入力）
+  timestamp: string;          // ISO8601
+}
+
 // フェーズ間の共通エンベロープ（全 PARTIAL_*.json が従う）
 interface PhaseArtifact<T> {
-  phase: string;            // 例 "01a", "03", "06"
+  id: string;               // このレコードの一意ID（derived_from で参照される）
+  phase: string;            // 例 "S2b", "S3", "S6"
   worker: number;
   batch: number;
   timestamp: string;        // ISO8601
   schema_version: string;
   status: "ok" | "partial" | "error";
+  provenance: Provenance;   // ★必須 — 来歴チェーン
   payload: T;
 }
 
-// S1 要件定義
+// S1 要件定義（★評価指標もここで大まかに決まる＝大会依存）
 interface Question { id: string; text: string; reason: string; answered?: string; } // 質問.json
 interface Definition { term: string; meaning: string; edge_case?: string; }          // 定義.json
 interface Subject { theme: string; constraints: string[]; rule_free?: boolean; }     // 題材.json
+interface ScoringRubric {                 // SCORING_RUBRIC.json ← S1 が大会ルールから導出
+  metrics: { name: string; weight: number; direction: "max" | "min" }[]; // 評価軸と配点
+  forbidden: string[];                    // 禁止事項（報酬ハック対策）
+  derived_from: string;                   // 由来した大会ルール（TOURNAMENT_INFO / 定義.json の id）
+}
 
-// S2 外部知見
-interface SearchWord { word: string; lang: "ja" | "en"; source: "rule" | "url" | "paper"; } // 検索ワード.json
-interface CrawledUrl { url: string; title: string; kind: "web" | "paper" | "arxiv"; saved_path: string; excluded?: "ad" | "nsfw" | null; } // urlクロール.json
+// S2 外部知見（source_ref に実ソースを必ず残す）
+interface SearchWord { word: string; lang: "ja" | "en"; from: "rule" | "url" | "paper"; } // 検索ワード.json
+interface CrawledUrl { url: string; title: string; kind: "web" | "paper" | "arxiv"; saved_path: string; excluded?: "ad" | "nsfw" | null; } // urlクロール.json（provenance.source_ref = url）
 
-// S3 戦略
+// S3 戦略（origin に加え provenance.derived_from で親を辿る）
 interface Strategy {
   id: string;
   origin: "requirement" | "result" | "paper" | "subject" | "rival" | "human_idea";
-  agent: "claude" | "gemini" | "codex" | "ollama" | "copilot";
   approach: string;
-  merged_from?: string[];   // 類似統合の履歴
+  merged_from?: string[];   // 類似統合の履歴（統合元の戦略 id）
+  // 「どの論文/知見/要件から出たか」は provenance.derived_from / source_ref に記録
 }
 
 // S6 ベンチマーク（README: 6.result.json）
 interface BenchResult {
   result_id: string;        // 1 result = S1..S6 の1周
-  strategy_id: string;
+  strategy_id: string;      // どの戦略の結果か（provenance.derived_from にも入る）
+  rubric_ref: string;       // ★どの ScoringRubric(=S1由来) で測ったか
   score: number;
   rank: number;             // 現在1位 など
   metrics: Record<string, number>;
@@ -170,6 +192,10 @@ interface BenchResult {
   threshold: { name: string; value: number }[]; // 閾値・遺伝子セッション
 }
 ```
+
+**来歴チェーンの例**（result.json から大会ルールまで遡れる）:
+`BenchResult` → `derived_from: [strategy_id]` → `Strategy.derived_from: [crawledUrl_id, requirement_id]` → `CrawledUrl.source_ref: "https://..."` / `Requirement.derived_from: [definition_id]` → `Definition.derived_from: [tournament_rule]`。
+「この戦略はどの論文・どの大会ルールから来たか」「このスコアはどの大会指標で測ったか」を JSON だけで完全に追跡できる（学術再現性 D17 と一体）。
 
 ---
 
