@@ -6,10 +6,10 @@ Taikai-killer の**狙い・設計・確定事項はすべてこの `docs/` に�
 
 1. [architecture.md](./architecture.md) — 全体アーキテクチャ（構成・mermaid設計図・データ契約・エラー経路）
 2. [directory-structure.md](./directory-structure.md) — **確定したディレクトリ構成**（nyx speca / presentation-agent 準拠）
-3. [decisions.md](./decisions.md) — 設計判断（確定 L1–L9 / 要確定 D1–D21）。**何が決まり何が未決かの一覧**
+3. [decisions.md](./decisions.md) — 設計判断（確定 L1–L9 / D1–D8 ＋ ヒアリング確定表）。**何が決まり何が未決かの一覧**。D9–D21 の定義実体は Issue #2 にあり、確定はヒアリング確定表に集約
 4. [steal-from-speca.md](./steal-from-speca.md) — speca md 精読で抽出した**流用パターン集**（A〜F）
 5. [troubleshooting.md](./troubleshooting.md) — 無限ループ運用の Runbook（4ステップ確認・終了コード）
-6. [execution-premise.md](./execution-premise.md) — 実行前提（サンドボックス無効・マシン破壊前提）
+6. [execution-premise.md](./execution-premise.md) — 実行前提（通常マシン・サンドボックス無効・隔離なし）
 - [../CLAUDE.md](../CLAUDE.md) — エージェント共通指示（Key Design Decisions・命名規約・env）
 
 ## 関連 Issue（外部知見の調査結果）

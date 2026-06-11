@@ -41,4 +41,4 @@
 - 探索的・横断的=skill フォーク／項目単位で閉じる=インライン。
 
 ## 実行前提
-- [サンドボックス無効・マシン破壊前提](./docs/execution-premise.md)。安全は隔離でなくホスト破棄で担保。詰まったら [troubleshooting.md](./docs/troubleshooting.md) の4ステップ。
+- [通常マシン・サンドボックス無効・隔離なし（リスク受容）](./docs/execution-premise.md)。安全は隔離でなく運用ガード（CB・予算・レビューゲート）で担保。詰まったら [troubleshooting.md](./docs/troubleshooting.md) の4ステップ。

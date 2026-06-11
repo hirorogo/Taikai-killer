@@ -115,7 +115,7 @@ speca (NyxFoundation/speca) の md（agent-design / OPTIMIZATION_NOTES / project
 ### E-3 ★ マルチランタイム登録（runtime_registry の実装解／D19）
 - 出典: `multi-runtime.md`
 - speca: 2系統のランナー抽象＝**CLI subprocess型**（claude/copilot/gemini/codex）と**OpenAI互換HTTP型**（`APIRunner` 基底→Codex/Gemini/Ollama がサブクラスで base_url/model だけ差替）。env規約 `{PROVIDER}_API_KEY/MODEL/BASE_URL`。`--list-runtimes` で availability 自己診断。未実装は**silent fallback でなく exit 2**。Ollama/Copilot 定額は cost=0。
-- **流用**: `orchestrator/api_runner.py` を基底に codex/gemini/ollama をサブクラス化。runtime_registry に `check_available()` を持たせる。env命名規約を config に固定。**未実装 runtime は exit 2 で fail-fast**。
+- **流用（D4で更新）**: 確定は **Claude + Gemini の2つを CLI subprocess** で駆動（speca の HTTP `APIRunner` 階層はサブスク CLI に流用不可）。`runtimeRegistry.ts` に `checkAvailable()`、env命名規約を config に固定、**未実装 runtime は exit 2**。codex/ollama/copilot は将来。
 
 ### E-4 ★ 自己改善の成果物 = locked prompt + manifest（プロバナンス）
 - 出典: `PHASE_B_DESIGN.md`
@@ -125,7 +125,7 @@ speca (NyxFoundation/speca) の md（agent-design / OPTIMIZATION_NOTES / project
 ### E-5 ★ ∞ループ運用の troubleshooting Runbook
 - 出典: `troubleshooting.md`
 - speca の実運用対処: **batch粒度 resume**（破損 `PARTIAL_W{w}B{b}` だけ rm して再開）／**orphan検出**（`state.json` の `owner_pid` が無ければ orphan→`reconcile_orphans` で `running→crashed`）／429で runtime を ollama/codex に切替／workspace肥大は **bare clone + worktree**／最後の砦 `rm -rf .speca/ outputs/`。**4ステップ確認順序**（stderr末尾→logs jsonl末尾→state.json→PARTIAL）。
-- **流用**: `docs/troubleshooting.md` を新規作成（→本コミットで作成）。
+- **流用**: `docs/troubleshooting.md`（作成済み）。
 
 ### E-6 成果物の Release bundle 保全
 - 出典: `release-artifacts.md`
@@ -137,7 +137,7 @@ speca (NyxFoundation/speca) の md（agent-design / OPTIMIZATION_NOTES / project
 ## F. CLAUDE.md で真似るべき項目
 - 出典: speca `CLAUDE.md`
 - **Key Design Decisions を1行ずつ断定形で列挙**／データフロー命名規約を固定／環境変数一覧（`FORCE_EXECUTE=1` 等の resume バイパス、決定論的 run-id）／「Required xxx — no hardcoded defaults（欠落なら exit 1）」。
-- **流用**: Taikai-killer の `CLAUDE.md` を新規作成（→本コミットで作成）。
+- **流用**: Taikai-killer の `CLAUDE.md`（作成済み）。
 
 ---
 

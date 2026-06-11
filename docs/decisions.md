@@ -22,12 +22,12 @@ Open は実装着手前に決め切る必要がある順に並べた。各項目
 | **レビューゲート（D6）** | **非STOP・非同期承認**（質問.json を dashboard/bot に出し回答で resume） |
 | **クロール（D7）** | **Scrapling は Python サイドカー**、JS必須は Playwright(TS)/playwright-mcp、静的は fetch |
 | **S2 収束** | 新規ユニーク率 **<10% で停止**（ハードキャップ4回と OR） |
-| **状態モデル（D9）** | **append-only イベントログ + replay**（再現性フルと一体） |
-| **冪等キー（D10）** | **入れる**（`hash(prompt+model+params+phase)`、dedup+resume 目的） |
+| **状態モデル（D9）** | **partial = resume の唯一の真実源**（glob スキャン）、**append-only イベントログは観測/再現用の write-only**（resume には使わない）。二重管理にしない |
+| **冪等キー（D10）** | **入れる**。`hash(prompt全文)` でなく **`hash(phase+worker+batch+親id集合+prompt_version+model)`**（timestamp除外）＝「処理済みマーカー」。出力キャッシュには使わない（LLM非決定のため） |
 | **CB しきい値（D11）** | speca 流用＝**連続失敗5 / 総リトライ20 / 連続空出力3 → exit 65** |
 | **コスト（D5）** | デフォルト無制限、`budget_usd` 指定時のみ停止（サブスクなので従量課金なし） |
-| **再現性（D17）** | **学会提出レベル（フル）**＝manifest+複数seed+CI報告+held-out+汚染検査 |
-| **進化（D18）** | **まず単一プールで開始**、後から island 化。変異対象=**戦略データ＋閾値/ハイパラのみ**（prompt は静的） |
+| **再現性（D17）** | 目標は**学会提出レベル**だが、サブスクCLIは seed/temp 固定不可。**達成可能なのは「手続き的再現」**＝全prompt/schema/親partialのhashを固定＋複数trialの分布報告。bit一致再現は放棄、seed/tempは`controllable:false`と明記 |
+| **進化（D18）** | **まず単一プールで開始**（island は後追い）。変異対象=**戦略データ（approach記述含む）＋閾値/ハイパラ**。ハーネス指示プロンプトは静的（approach は data であり変異対象でよい）。**評価器D3確定まで起動しない** |
 | **dashboard 認証** | speca の API キーログインを**そのまま残す** |
 | **presentation-agent** | **後で vendor**（今は参照のみ） |
 | **ライセンス** | **非公開/未定**（license ファイル置かない） |
@@ -43,9 +43,9 @@ Open は実装着手前に決め切る必要がある順に並べた。各項目
 | L1 | 全体構造は **直列フェーズ S1..S6 ＋ 無限ループ**、1周 = 1 result | README / speca |
 | L2 | フェーズ間は **中間 JSON で受け渡し**（全段で出力を残す） | README / speca |
 | L3 | Orchestrator は **resume / circuit-breaker / cost-tracker / watchdog** を持つ | speca orchestrator |
-| L4 | **マルチエージェント並列**（claude/gemini/codex/ollama/copilot） | README |
-| L5 | 実行は **サンドボックス無効・マシン破壊前提**（使い捨てホスト） | execution-premise.md |
-| L6 | 失敗は局所スキップ、**停止は予算上限とヒューマンレビューゲートのみ** | architecture.md |
+| L4 | **マルチエージェント並列＝Claude + Gemini**（CLI subprocess）。codex/ollama/copilot は将来拡張 | ヒアリング |
+| L5 | 実行は **通常マシン・サンドボックス無効・隔離なし（リスク受容）**。使い捨てホスト/破壊前提は撤回 | execution-premise.md |
+| L6 | 失敗は局所スキップ、**停止はレート枯渇・レビューゲート・暴走停止(CB)のみ**（コスト上限は任意指定時） | architecture.md |
 | L7 | 発表資料生成は **presentation-agent（Slidev）** を参考に組み込む | Issue #1 |
 | L8 | 戦略・閾値の最適化は **進化的探索（FunSearch 系）** を採用方針 | Issue #1 |
 | L9 | **セッション別ループポリシー**（下表）で各 S の回数・停止条件を固定 | 本決定 |
@@ -77,8 +77,8 @@ README で未決だった点。**フォルダ構造で確定**。
 ### D2. フェーズ間 JSON 契約の厳密度と命名 ✅確定（[directory-structure.md](./directory-structure.md)）
 `PhaseArtifact<T>` エンベロープを**正式スキーマとして固定**する。
 - **確定: `schemas/` に speca 同型の3+1層（データ型 / `S{n}Partial` / `*Event` / `RunManifest`）を置き、ランナー/CI で検証必須。**
-- 命名規約確定: partial = `S{n}_PARTIAL_W{worker}B{batch}_{ISO8601}.json`、run dir = `{ISO8601}-{commit}-{大会slug}`。
-- 残: 各 `*.schema.json` の中身を実装（実装タスク）。
+- 命名規約確定: partial = `S{n}_PARTIAL_W{worker}B{batch}_{ISO8601}.json`、run dir = `{ISO8601}-{git短縮hash}-{大会slug}`。
+- 残: 各 `*.schema.json` の中身を実装（**＝器は確定だが中身は未実装**。型(TS interface)はあるが JSON Schema 実体・検証ルールは未着手）。
 
 ### D3. ベンチマーク評価器の定義 ✅一部確定（評価指標の出所）
 - **確定: 評価指標は S1（フェーズ1）が大会ルールから導出する＝大会依存。** S6 で固定の指標を持たず、S1 が `SCORING_RUBRIC.json`（評価軸・配点・禁止事項）を大会ごとに出力し、S6 はそれを `rubric_ref` で参照して測る（[architecture.md](./architecture.md) データ契約）。
@@ -87,29 +87,30 @@ README で未決だった点。**フォルダ構造で確定**。
 - **残（実装で詰める）**: ②閾値の初期値と更新規則 ③遺伝子セッションの交叉/変異の対象（→ D18 の island ハイパラで具体化）④対照実験の比較単位（→ Issue #2 D17 の CI ベース判定）。
 - **報酬ハック対策**: `SCORING_RUBRIC.forbidden` に禁止事項を明記し、評価器・テスト改ざんを契約レベルで禁止（Issue #2 TOP3-①）。
 
-### D4. マルチエージェント抽象インターフェース ★高
-claude/gemini/codex/ollama/copilot を**どう統一して呼ぶか**。
-- **推奨: CLI + MCP の統一ワーカー IF（speca と同じく `claude` CLI 駆動を基準に、他モデルはアダプタで吸収）**
-- 理由: API 直叩きはモデル差異・認証差異が漏れる。CLI/MCP 層で正規化し、dispatch を均質化。フォールバック順（落ちたら次モデル）も定義。
+### D4. マルチエージェント抽象インターフェース ✅確定
+- **確定: Claude + Gemini の2つ、CLI を subprocess で駆動**（サブスク認証をそのまま利用）。codex/ollama/copilot は将来拡張（未実装は exit 2）。
+- runtime は **CLI subprocess 型**で統一（speca の HTTP `APIRunner` 階層はサブスク CLI には流用不可。CLI 用に別設計）。CLI は機械可読モード（`--output-format json`/stream-json 等）で叩き、装飾 stdout パースは禁止。各 subprocess に**ハード timeout** 必須、timeout kill 時は `status:"error"` partial を書いてから次へ。
+- フェーズ×モデルは config で手動指定。フォールバック順（落ちたら次モデル）も定義。
 
 ### D5. レート/コスト制御ポリシー ✅確定
 - **確定: 予算上限は必須にしない。標準＝無制限**（README「レートリミットの続く限り無限でおこなう」と一致）。コスト上限は**任意で指定できる opt-in**。
   - **未指定（デフォルト）**: 無制限。停止条件は**レート枯渇 ＋ ヒューマンレビューゲート ＋ 暴走停止（CB）**のみ。`BudgetExceeded`(exit 64) は発火しない。
   - **指定時**: `SCORING_RUBRIC.json` / 設定で `budget_usd`（result 単位 or 日次）を渡せる。超過で result を保存して通知し停止（`E_COST` / exit 64）。`cost_tracker` は常に**追跡はする**（指定が無くても可視化はする）が、**強制終了は上限指定時のみ**。
-- **②ratelimit 復帰戦略**: `E_RATELIMIT` は失敗にカウントせず、指数バックオフで待機→復活検知→resume。または `--runtime` で別モデルに切替（steal E-3）。
-- **③暴走停止条件**: コストではなく **CB の3カウンタ**（連続失敗5 / 総リトライ20 / 連続空出力3 → exit 65）で止める（無制限運用でも暴走は止まる）。
+- **②ratelimit 復帰戦略**: `E_RATELIMIT` は失敗にカウントせず、指数バックオフで待機→復活検知→resume。または別モデル（Claude↔Gemini）に切替。
+- **③暴走停止条件**: コストではなく **CB の3カウンタ**（連続失敗5 / 総リトライ20 / 連続空出力3 → exit 65）で止める（無制限運用でも暴走は止まる）。**ただし「非空だが無進捗」（score/rank が N ラウンド改善せず）も stall として検出する必要あり＝実装課題**。
+- ⚠️ **前提リスク（レビュー指摘・未解決）**: サブスク CLI を無限ループ・並列 subprocess で叩くのは各社の自動化規約に抵触しうる。「サブスク＝無制限」は誤りで、本番では並列度・頻度の自主制限 or 従量課金API＋`budget_usd` 必須化が要る。→ 前提として要再検討。
 
-### D6. ヒューマンレビューゲートの実装 ★中
-- **固めるべき**: STOP / 非STOP モードの切替、入力経路（Dashboard / Slack / Discord / issue）、`質問.json` の提示単位
-- **推奨: 非同期承認** — STOP せず `質問.json` を Dashboard/bot に出し、回答が来たら resume で反映（README「後でも行える」に合致）。
+### D6. ヒューマンレビューゲートの実装 ✅確定
+- **確定: 非STOP・非同期承認**。STOP せず `質問.json` を Dashboard/bot に出し、回答が来たら resume で反映（README「後でも行える」に合致）。
+- 入力経路は vendor 済み dashboard（speca の承認フロー `chat_approvals`/ApprovalCard を流用）＋ Slack/Discord bot。
 
-### D7. 外部知見クロールのフォールバック確定 ★中
-- **固めるべき**: Scrapling / playwright-mcp の役割分担、論文取得経路
-- **推奨: 論文は Semantic Scholar API を一次経路に確定**（arXiv export は egress IP で 503 ブロック実績／Issue #1）。一般Webは Scrapling、JS必須サイトは playwright-mcp。
+### D7. 外部知見クロールのフォールバック確定 ✅確定
+- **確定: 論文= Semantic Scholar API を一次経路**（arXiv export は egress IP で 503 ブロック実績／Issue #1）。一般Web= **Scrapling（Python サイドカー）**、JS必須サイト= Playwright(TS)/playwright-mcp、静的= fetch。MCP 不安定時は built-in にフォールバック（steal D-3）。
+- ⚠️ 歩留まり前提（レビュー指摘）: ブロック/robots/bot検知で成功率は想定の数分の一。「大量に集める」より**少数の良質ソースを深く読む**＋API一次経路に寄せる方針。robots/ToS 遵守・低頻度・キャッシュ前提。
 
-### D8. 実行ホストの再作成手段 ★中
-- **固めるべき**: 使い捨てホストのプロバイダ・イメージ化（snapshot / cloud-init / Dockerfile）・resume 再投入手順
-- **推奨: IaC 1コマンド再生成 ＋ result.json から resume** を破壊時の標準復旧フローに（execution-premise.md）。
+### D8. 実行ホスト ✅確定（撤回）
+- **確定: 使い捨てホストは使わない。通常マシンで実行**（[execution-premise.md](./execution-premise.md)）。破壊前提・IaC再作成は撤回。破壊検知時は自動破棄せず通知＋停止、復旧は手動。
+- ⚠️ レビュー指摘（未解決）: 通常マシンでサンドボックス無効＋S5 生成コード実行は自己破壊リスク。最低限 S5 のみコンテナ/別ユーザ隔離する選択肢は要検討。`outputs/` のバックアップ設計も未整備。
 
 ---
 
@@ -120,7 +121,7 @@ flowchart LR
   D2[D2 JSON契約] --> D1[D1 フォルダ/並行]
   D2 --> D4[D4 エージェントIF]
   D2 --> D3[D3 評価器]
-  D1 --> SKEL[骨組み: orchestrator + run_phase]
+  D1 --> SKEL[骨組み: orchestrator + runPhase.ts]
   D4 --> SKEL
   D3 --> S6IMPL[S6 ベンチ実装]
   SKEL --> S1IMPL[S1..S5 実装]

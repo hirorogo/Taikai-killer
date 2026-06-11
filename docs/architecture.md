@@ -2,7 +2,8 @@
 
 自律 AI ハーネス（要件定義→外部知見→戦略→要件精緻化→コード生成→ベンチマークを無限ループ）の
 アーキテクチャを定義する。設計の土台は speca orchestrator（Issue #1）と
-[実行環境前提](./execution-premise.md)（サンドボックス無効・マシン破壊前提）。
+[実行環境前提](./execution-premise.md)（通常マシン・サンドボックス無効・隔離なし）。
+**確定事項は [decisions.md](./decisions.md) のヒアリング確定が最上位の正。**
 
 ---
 
@@ -10,15 +11,15 @@
 
 | レイヤ | 採用 / 候補 | 役割 |
 |---|---|---|
-| Orchestrator | Python（speca `scripts/orchestrator/` 流用） | フェーズ実行・並列ワーカー・resume・暴走/コスト制御 |
-| Phase Runner | `run_phase.py` 相当 | 依存解決・cleanup・resume の統一エントリ |
-| Agents | claude / gemini / codex / ollama / copilot（CLI + MCP） | 各フェーズの実作業ワーカー |
+| Orchestrator | **TypeScript/Node**（speca `scripts/orchestrator/` の Python を移植） | フェーズ実行・並列ワーカー・resume・暴走/コスト制御 |
+| Phase Runner | `runPhase.ts` 相当 | 依存解決・cleanup・resume の統一エントリ |
+| Agents | **claude / gemini**（CLI subprocess、サブスク認証）。codex/ollama/copilot は将来拡張 | 各フェーズの実作業ワーカー |
 | Data Contract | JSON Schema（`schemas/`） | フェーズ間の型付き受け渡し |
-| External Knowledge | Scrapling / playwright-mcp | クロール・スクレイプ |
-| Optimization | 進化的探索（FunSearch 系：評価器→交叉/変異） | 戦略・閾値の最適化 |
-| Dashboard | Next.js + Slack/Discord bot | 状態確認・ヒューマンレビュー入力 |
-| Presentation | presentation-agent（Slidev） | 発表資料の自律生成 |
-| Host | 使い捨て VM / VPS / コンテナ | 破壊前提の実行基盤 |
+| External Knowledge | Scrapling（Python サイドカー）/ Playwright(TS) / fetch | クロール・スクレイプ |
+| Optimization | 進化的探索（まず単一プール→island／FunSearch 系） | 戦略・閾値の最適化 |
+| Dashboard | speca web/ を vendor（FastAPI→TS 書換中 + React/Vite）+ Slack/Discord bot | 状態確認・ヒューマンレビュー入力 |
+| Presentation | presentation-agent（Slidev、後で vendor） | 発表資料の自律生成 |
+| Host | **通常マシン**（隔離なし・サンドボックス無効・リスク受容） | 実行基盤 |
 
 ---
 
@@ -27,7 +28,7 @@
 ```mermaid
 flowchart TD
   subgraph CTRL["Orchestrator / 制御層"]
-    ORCH[Phase Runner<br/>run_phase.py]
+    ORCH[Phase Runner<br/>runPhase.ts]
     RES[Resume Manager]
     CB[Circuit Breaker]
     COST[Cost Tracker]
@@ -54,10 +55,10 @@ flowchart TD
     A2[gemini CLI]
   end
 
-  HR[Human Review Gate<br/>必須1回 / STOP可]
+  HR[Human Review Gate<br/>非STOP・非同期承認]
   DASH[Dashboard + Slack/Discord bot]
   STORE[(JSON Store / outputs<br/>schemas準拠)]
-  HOST[使い捨てホスト<br/>サンドボックス無効]
+  HOST[通常マシン<br/>サンドボックス無効・隔離なし]
 
   ORCH -->|初回起動| BOOT
   ORCH -->|フェーズ起動| LOOP
@@ -134,7 +135,7 @@ flowchart TD
 // ★来歴(provenance) — 全レコードが「どこから来たか」を持つ。フェーズを跨いで辿れる。
 interface Provenance {
   produced_by: string;        // 生成したフェーズ "S3" / worker など
-  agent?: "claude" | "gemini" | "codex" | "ollama" | "copilot";
+  agent?: "claude" | "gemini"; // codex/ollama/copilot は将来拡張
   prompt_version?: string;    // どの prompt 版で生成したか（D20）
   derived_from: string[];     // ★親レコードの id（上流の Strategy/CrawledUrl/Requirement…）
   source_ref?: string;        // 元ソースの実体（URL / 論文arXiv id / ファイルパス / 人間入力）
@@ -201,19 +202,19 @@ interface BenchResult {
 | コード | 条件 | 挙動 |
 |---|---|---|
 | `E_INPUT` | フェーズ入力 JSON 欠落 / スキーマ不一致 | 当該ワーカーを `status:"error"` で記録しスキップ、他ワーカーは継続 |
-| `E_AGENT_CONFIG` | APIキー未設定 / モデル未到達 | そのエージェントを dispatch 対象から除外、残モデルで続行 |
-| `E_LLM_COMM` | LLM 通信失敗 / レスポンス JSON 不正 | リトライ→Circuit Breaker が失敗率で遮断 |
-| `E_RATELIMIT` | レート上限 | 待機→復活検知→Resume で再開（停止しない） |
-| `E_COST` | USD 予算上限到達 | フェーズ停止、result を保存して人間に通知 |
-| `E_CRAWL` | クロール失敗 / 広告・不適切 | 当該URLを除外（`excluded`）、ワード改善ループへ |
-| `E_CODE_TEST` | 生成コードがテスト不通過 | 自己改善プロンプトで再生成、通すまで継続 |
-| `E_HOST` | ホスト汚染/破壊検知 | 修復せず破棄→再作成→result.json から resume（破壊前提運用） |
+| `E_AGENT_CONFIG` | CLI 未認証 / モデル未到達 | そのエージェントを dispatch 対象から除外、残モデルで続行 |
+| `E_LLM_COMM` | CLI 失敗 / stdout JSON 不正 / タイムアウト | リトライ→Circuit Breaker が遮断（`status:"error"` partial を書いてから次へ） |
+| `E_RATELIMIT` | レート上限 | 待機→復活検知→Resume で再開（停止しない。CB の失敗にカウントしない） |
+| `E_COST` | `budget_usd` 指定時の予算上限到達 | フェーズ停止（**exit 64**）、result を保存して通知。未指定なら発火しない |
+| `E_CRAWL` | クロール失敗 / 広告・不適切 | 当該URLを除外（`excluded`）、MCP不安定時は built-in(fetch)へフォールバック、ワード改善ループへ |
+| `E_CODE_TEST` | 生成コードがテスト不通過 | 自己改善プロンプトで再生成（同一プロンプト単純リトライ禁止）、通すまで継続 |
+| `E_HOST` | ホスト汚染/破壊検知 | **通常マシン運用のため自動破棄はしない**。検知して通知＋停止、復旧は手動（IaC再作成は任意） |
 
 > 思想: **単一ワーカーの失敗でループを止めない**。失敗は JSON に記録して局所スキップし、
-> 全体の無限ループ（速度・自律性）を優先する。停止は予算上限とヒューマンレビューゲートのみ。
+> 全体の無限ループ（速度・自律性）を優先する。停止はレート枯渇・ヒューマンレビューゲート・暴走停止(CB)のみ（コスト上限は任意指定時）。
 
 ---
 
 ## 関連
-- 実行前提: [execution-premise.md](./execution-premise.md)（サンドボックス無効・マシン破壊前提）
+- 実行前提: [execution-premise.md](./execution-premise.md)（通常マシン・サンドボックス無効・隔離なし）
 - 先行研究/類似OSS: Issue #1（speca orchestrator・presentation-agent・FunSearch ほか）

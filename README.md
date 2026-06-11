@@ -1,5 +1,10 @@
 # Taikai-killer
 
+> **注**: 以下は初期構想（ブレインストーミング）。**設計の正は [`docs/`](./docs/README.md)** で、確定事項は [docs/decisions.md](./docs/decisions.md) の「ヒアリング確定」が最上位。
+> 2026-06-11 時点の確定: スタック= **TypeScript/Node**（Scrapling のみ Python サイドカー）、モデル= **Claude + Gemini（サブスク・CLI subprocess）**、実行= **通常マシン・サンドボックス無効**。
+> ⚠️ 以下の本文に残る「Gemini/Copilot/Claude/Codex/Ollama」「スタック未定」等は構想当時の表現で、上記確定が優先。
+> ⚠️ 未解決の前提課題（[レビュー](./docs/decisions.md)参照）: 対象大会の出場資格、サブスクCLI自動化の規約、提出の可否。
+
 ## auto 大会killer ハーネス設計
 
 ### 目的

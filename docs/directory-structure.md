@@ -56,28 +56,29 @@ Taikai-killer/
 speca `scripts/orchestrator/`（Python）の実ファイルを **TS に移植**して対応づける（下記は `.py`→`.ts`）。
 runtime は **claude / gemini の CLI を subprocess で駆動**（サブスク認証をそのまま利用、従量課金なし）。
 
+（TS 移植。`speca: <name>.py` は移植元）
 ```
 orchestrator/
-├── __init__.py
-├── runner.py            # フェーズ実行の中核（speca: runner.py）
-├── api_runner.py        # LLM API 経由ワーカー（speca: api_runner.py）
-├── runtime_registry.py  # ★マルチモデル統一層 claude/gemini/codex/ollama/copilot（D19）
-├── copilot_runner.py    # モデル別ランナーの例（speca に実在）
-├── queue.py             # Work Queue / batch 分割（speca: queue.py, batch.py）
-├── batch.py
-├── collector.py         # 並列ワーカー出力の統廃合・dedup（speca: collector.py）
-├── factory.py           # フェーズ→ワーカー生成（speca: factory.py）
-├── resume.py            # 再開（D9：イベント replay）
-├── watchdog.py          # 停滞/暴走検知（D11：stuck 5パターン＋除外窓）
-├── circuit_breaker.py   # 失敗率/連続失敗/無進捗でトリップ（D11）
-├── cost_tracker.py      # USD 予算・tag budget・90%早期停止（D10/コスト）
-├── idempotency.py       # ★hash(prompt+model+params+phase) キャッシュ（D10）
-├── event_models.py      # イベント型（speca: event_models.py）
-├── json_events.py       # append-only イベント書込（speca: json_events.py / D9）
-├── archiver.py          # run のアーカイブ（speca: archiver.py）
-├── paths.py             # outputs パス規約（speca: paths.py）
-├── schemas.py           # スキーマロード/検証（speca: schemas.py）
-└── config.py            # ハイパラ（island数・閾値・予算）（speca: config.py）
+├── index.ts
+├── runner.ts            # フェーズ実行の中核（speca: runner.py）
+├── runtimes/
+│   ├── claudeRunner.ts  # claude CLI subprocess（機械可読モード）
+│   └── geminiRunner.ts  # gemini CLI subprocess
+├── runtimeRegistry.ts   # ★Claude/Gemini の2ランナー登録（D19）。codex等は将来
+├── queue.ts             # Work Queue / batch 分割（speca: queue.py, batch.py）
+├── batch.ts
+├── collector.ts         # 並列ワーカー出力の統廃合・dedup＋provenance DAG検証（speca: collector.py）
+├── factory.ts           # フェーズ→ワーカー生成（speca: factory.py）
+├── resume.ts            # 再開（partial の glob スキャンが真実源／D9）
+├── watchdog.ts          # 停滞/暴走検知（D11：stuck 5パターン＋除外窓）
+├── circuitBreaker.ts    # 連続失敗/総リトライ/連続空出力でトリップ（D11）
+├── costTracker.ts       # call数/時間/budget 追跡・90%早期停止（D5）
+├── idempotency.ts       # ★親id集合ベースの処理済みマーカー（出力キャッシュではない／D10）
+├── events.ts            # append-only イベント書込（観測/再現用、resume非依存／D9）
+├── archiver.ts          # run のアーカイブ（speca: archiver.py）
+├── paths.ts             # outputs パス規約（speca: paths.py）
+├── schemas.ts           # スキーマロード/検証（speca: schemas.py）
+└── config.ts            # フェーズ×モデル割当・CB閾値・予算・進化ハイパラ（speca: config.py）
 ```
 
 ---
@@ -175,19 +176,20 @@ outputs/                              # .gitignore（*.png/*.md だけ allowlist
 
 ```
 projects/                       # 戦略ごとに独立フォルダ（branch でなくフォルダ＝D1）
-├── _skeleton/                  # 使い回す雛形（templates/ から生成）
+├── _skeleton/                  # 使い回す雛形（templates/ から生成。★中身=対象大会の言語/テスト方式は要具体化）
 └── {strategy_id}/              # 戦略1つ＝1ワークスペース（worktree 任意）
     ├── strategy.json           # Strategy.schema.json 準拠
     ├── src/                    # 生成コード
     └── bench/                  # この戦略のベンチ結果
 
-evolution/                      # 遺伝子セッション（FunSearch/AlphaEvolve 準拠 / D18）
-├── islands/{0..N}/             # island model（初期 island=5〜10）
-├── program_db/                 # signature クラスタ・系統（短い解優遇）
-└── config.py                   # 移住周期・探索率・カスケード閾値
+evolution/                      # 遺伝子セッション（D18）★初期スコープ外（run数が増えてから）
+├── pool.json                   # まず単一プール（戦略JSONの配列）で開始
+└── config.ts                   # 進化ハイパラ（island化は後追い。island/移住周期は将来）
 ```
 
-- **worktree 運用（D13）**: `projects/{strategy_id}/` を git worktree に割り当てる場合、共有 `.git` への commit は orchestrator のミューテックスで直列化、`index.lock` は retry-backoff。
+> **D18 注**: 初期は **単一プール（`pool.json`）のみ**。island/program_db/移住は run 数が3桁規模になってから（評価器 D3 が固まるのが前提＝**評価器確定まで進化は起動しない**）。
+
+- **worktree 運用（D13）**: `projects/{strategy_id}/` を git worktree に割り当てる場合、共有 `.git` への commit は orchestrator のミューテックスで直列化、`index.lock` は retry-backoff。**初回 run では不要（∞並行が走ってから）**。
 
 ---
 
