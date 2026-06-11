@@ -45,13 +45,26 @@ async function main(): Promise<void> {
       await runSlice(runDir);
       break;
     }
+    case "evolve": {
+      // D18①: じゃんけんパラメータを LLM 非依存で進化（数値最適化トラック）
+      const { evolveJankenDemo } = await import("../evolution/evolveDemo.ts");
+      const seed = Number(getOpt("seed") ?? 42);
+      const iterations = Number(getOpt("iterations") ?? 80);
+      const r = await evolveJankenDemo({ seed, iterations });
+      console.log(
+        `[evolve] win_rate ${r.initialWinRate.toFixed(3)} -> ${r.evolvedWinRate.toFixed(3)} (improved=${r.improved})`,
+      );
+      console.log(`[evolve] evolvedParams=${JSON.stringify(r.evolvedParams)}`);
+      process.exit(r.improved ? 0 : 1);
+      break;
+    }
     case "doctor": {
       const { doctor } = await import("./runner.ts");
       await doctor(runDir);
       break;
     }
     default:
-      console.error("usage: taikai <probe|run|doctor> [--run-dir <path>]");
+      console.error("usage: taikai <probe|run|doctor|evolve> [--run-dir <path>] [--seed N] [--iterations N]");
       process.exit(2);
   }
 }
