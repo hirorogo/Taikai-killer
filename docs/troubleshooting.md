@@ -22,7 +22,7 @@ S2..S6 をレート枯渇まで∞ループで回す前提の運用手順。spec
 | **再開したい** | `--force` で resume 状態を無視。**破損 partial は該当 batch だけ削除して resume**（例 `rm outputs/{run}/partials/S5_PARTIAL_W0B5_*.json`）。queue 破損は `rm .../S5_QUEUE_*.json` で再生成 |
 | **orphan run（プロセス死亡だが running 表示）** | `state.json` の **`owner_pid` がOSに存在しなければ orphan**。supervisor 起動時の `reconcile_orphans` が自動で `running→crashed` にリラベル。手動なら state.json を直接patch。**∞ループ＋物理切断（USBレター変動・断続切断）で頻発するので必須** |
 | **レート枯渇（429）** | `E_RATELIMIT`：**失敗にカウントせず**待機→復活→resume。または `--runtime ollama`/`codex` に切替（steal E-3）。`E_RATELIMIT` は CB の `consecutive_failures` に**加算しない**（独自分岐） |
-| **コスト超過** | `BudgetExceeded` で **exit 64**、result を保存して通知。90%で early-stop シグナル |
+| **コスト超過** | **`budget_usd` を指定したときだけ** `BudgetExceeded` で **exit 64**（result 保存＋通知、90%で early-stop）。デフォルト無制限では発火しない（D5） |
 | **workspace 肥大（戦略多数で数GB）** | `projects/{strategy_id}/` は **bare clone + `git worktree add --detach`** でディスク節約（D13）。不要 worktree を rm（次回再生成） |
 | **MCP 不安定（クロール/解析）** | `E_CRAWL`：MCP 失敗→**built-in（requests/シェル `rg`）にフォールバック**（steal D-3）。「N項目個別MCPコール」より「1コマンドでバッチ→マップ参照」 |
 | **ホスト汚染/破壊** | `E_HOST`：修復せず**破棄→IaC で再作成→`result.json`/partial から resume**（破壊前提運用） |
@@ -34,7 +34,7 @@ S2..S6 をレート枯渇まで∞ループで回す前提の運用手順。spec
 
 | code | 意味 | トリガ |
 |---|---|---|
-| 64 | `BudgetExceeded` | USD 予算上限（run単位 / 日次） |
+| 64 | `BudgetExceeded` | USD 予算上限（**`budget_usd` 指定時のみ**。デフォルト無制限では無効） |
 | 65 | `CircuitBreakerTripped` | 連続失敗5 / 総リトライ20 / 連続空出力3 |
 | 2  | runtime 未実装 | 未登録 runtime 指定（silent fallback 禁止 / fail-fast） |
 

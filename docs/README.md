@@ -20,5 +20,6 @@ Taikai-killer の**狙い・設計・確定事項はすべてこの `docs/` に�
 - ✅ ループ方針（L9）: S1=1回 / S2=最大4回・収束で早期終了 / S3–S6=レート枯渇まで
 - ✅ D1 並行モデル: `projects/<strategy_id>/` フォルダ（branch不使用）
 - ✅ D2 フェーズ契約: `schemas/` 3+1層（speca同型）＋命名規約
+- ✅ D5 コスト制御: **デフォルト無制限**、`budget_usd` 指定時のみ強制終了。暴走は CB で停止
 - 🔴 次に固める: D3 評価器 / D18 進化ハイパラ / D10 冪等キー / D9 状態モデル（#2参照）
 - 🔧 実装着手可: `orchestrator/` 骨組み（speca fork）＋ `schemas/*.json` 起こし

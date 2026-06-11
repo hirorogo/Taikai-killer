@@ -4,7 +4,8 @@
 設計の正は [`docs/`](./docs/README.md)。speca `CLAUDE.md` の書き方を流用（[steal-from-speca.md](./docs/steal-from-speca.md) F）。
 
 ## Key Design Decisions（断定形・最上位）
-- **単一ワーカーの失敗でループを止めない。** 失敗は partial に記録して局所スキップ。停止は**予算上限とヒューマンレビューゲートのみ**。
+- **単一ワーカーの失敗でループを止めない。** 失敗は partial に記録して局所スキップ。停止は**レート枯渇・ヒューマンレビューゲート・暴走停止(CB)のみ**。
+- **コスト上限はデフォルト無制限。** 任意で `budget_usd` を指定したときだけ強制終了（exit 64）。未指定なら追跡のみで止めない（README「レート枯渇まで無限」/ D5）。
 - **Partial results are first-class.** `outputs/{run}/partials/*.json` はログでなく**フェーズ間契約**。80%完了なら80%を次フェーズが消費する。Resume はディレクトリ glob スキャンのみ（状態DB・UUID を持たない）。
 - **スキップ時も出力ファイルは必ず書く。** これが無いと Resume が item を取りこぼす（partial-first の必須要件）。
 - **Circuit Breaker はフェーズ共有。** `consecutive_failures=5` / `total_retries=20` / `consecutive_empty_results=3` でトリップ→exit 65。
