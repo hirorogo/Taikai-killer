@@ -3,13 +3,13 @@
  * 移植元: dashboard/server/services/chat_runtime_gemini.py（speca, Python→TS）。
  * 構造は claudeRunner.ts と同形に揃える（spawn / stdin プロンプト / ハード timeout / 本文抽出 / --version 存在確認）。
  *
- * ⚠ フラグ非互換の可能性（要実機検証）:
- * - gemini CLI の正確な非対話フラグは claude と異なる可能性が高い。本実装は「非対話・1ショット・
- *   機械可読」を狙って暫定フラグ（GEMINI_NONINTERACTIVE_FLAGS）を置くが、実機で gemini CLI のヘルプを
- *   確認して差し替える前提。最低限 `gemini --version` で存在確認できる形は保証する。
- * - Google 公式 gemini CLI は非対話実行を `-p/--prompt` または stdin で受ける版があり、
- *   `--output-format json` 相当が無い版もある。そのため本文抽出は「JSON ならパース、ダメなら素の
- *   stdout を本文扱い」の二段構えにしている（D4: 装飾 stdout はそのまま採用せず、可能なら機械可読を優先）。
+ * ✅ 実機検証済み（gemini CLI v0.41.2, 2026-06-11）:
+ * - 非対話: `-p ""` ＋ プロンプトは stdin（`-p` の値は stdin に追記される仕様）。
+ * - 機械可読: `-o json`。成功時 `{ "response": "<text>", "stats": {...}, "session_id": ... }`、
+ *   エラー時 `{ "session_id": ..., "error": { "type", "message", "code" } }`。
+ * - 自動承認: `--approval-mode yolo`（ツール確認を出さない）。
+ * - ⚠ 認証は別途必要: GEMINI_API_KEY / GOOGLE_GENAI_USE_GCA(Gemini Code Assist=サブスク) 等。
+ *   未設定だと error.code=41 を返す。checkAvailable は `--version` の存在確認のみで認証は見ない。
  */
 import { spawn } from "node:child_process";
 import type { GenerateInput, GenerateOutput, Runtime } from "../runtimeRegistry.ts";
@@ -17,32 +17,21 @@ import type { GenerateInput, GenerateOutput, Runtime } from "../runtimeRegistry.
 const IS_WIN = process.platform === "win32";
 
 /**
- * ⚠ 暫定フラグ。gemini CLI の実フラグは未確定（claude と非互換の可能性大）。
- * 非対話・1ショット・機械可読を意図する。実機検証後にここを差し替える。
- * - claude の `--print` 相当（非対話 1ショット）として `-p` を想定。プロンプト本文は stdin で渡すため
- *   `-p` には値を付けない版が無い場合は、buildArgs の方を実機に合わせて修正する。
- * - JSON 機械可読出力フラグも未確定（`--output-format json` 等）。無い版では extractText の
- *   フォールバックで素の stdout を本文採用する。
+ * ✅ 実機検証済みフラグ（gemini v0.41.2）。
+ * `-p ""`（非対話・プロンプトは stdin）/ `-o json`（機械可読）/ `--approval-mode yolo`（自動承認）。
  */
-const GEMINI_NONINTERACTIVE_FLAGS = ["-p"] as const;
+const GEMINI_NONINTERACTIVE_FLAGS = ["-p", "", "-o", "json", "--approval-mode", "yolo"] as const;
 
 /** checkAvailable 用の軽量 timeout（claudeRunner と同値）。 */
 const VERSION_TIMEOUT_MS = 15_000;
 
 function buildArgs(input: GenerateInput): string[] {
-  // ⚠ 実フラグ未確定。非対話・機械可読を意図した暫定構成。
+  // 非対話・機械可読・自動承認（実機検証済み）。
   const args: string[] = [...GEMINI_NONINTERACTIVE_FLAGS];
-
-  // ツール許可（集中力ガード / 集約は config 側）。
-  // ⚠ gemini CLI に allowed-tools 相当が無い版がある。フラグ名が違うため、実機確認まで
-  //    「許可ツールが指定されたら拡張する」スロットだけ用意し、既定では何も足さない。
-  const allowed = input.allowedTools ?? [];
-  if (allowed.length > 0) {
-    // 例: args.push("--allowed-tools", allowed.join(",")); ← フラグ名は実機で要確認
-  }
-
-  // system プロンプトの渡し方も版依存。claude の `--append-system-prompt` 相当が無ければ
-  // run() 側で stdin プロンプトの先頭に畳み込む（下記参照）。
+  // ツールは MVP では使わない（純生成）。gemini は allowed-tools が deprecated→Policy Engine 移行のため、
+  // 許可制御が要るフェーズでは --policy を使う（現状は未指定＝既定でツール確認なし＝yolo）。
+  void input.allowedTools;
+  // system は composePrompt で stdin 先頭に畳み込む（gemini は --append-system-prompt 相当が無い）。
   return args;
 }
 

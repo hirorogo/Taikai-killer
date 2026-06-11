@@ -131,6 +131,30 @@ function extractJson(text: string): unknown {
   return JSON.parse(body.slice(start, end + 1));
 }
 
+/**
+ * D22 reflector（既定=LLM）。失敗したコードとテスト出力から「何が悪く次どう直すか」を
+ * 短い改善指示として生成する（コードは書かせない）。テストは正しい前提＝改変させない。
+ */
+async function reflect(spec: string, code: string, testOutput: string): Promise<string> {
+  const prompt = `あなたは S5 reflector。失敗したコードとテスト出力を読み、**何が悪く次どう直すか**を日本語で2〜3文に。
+コードは書かない（方針だけ）。テストは正しい前提なので「テストを直す」提案は禁止。
+
+## 課題仕様
+${spec}
+
+## 失敗したコード
+${code.slice(0, 1500)}
+
+## テスト出力
+${testOutput.slice(0, 1500)}`;
+  try {
+    const out = await runCLISubprocess("claude", { prompt, timeoutMs: 60_000 });
+    return out.text.trim().slice(0, 500);
+  } catch {
+    return ""; // reflector 失敗時は素の失敗出力注入にフォールバック
+  }
+}
+
 // ───────── doctor（起動前バリデータ / 欠落4） ─────────
 
 export async function doctor(runDir: string): Promise<void> {
@@ -242,10 +266,13 @@ Strategy[] の JSON だけを出力（id/origin/approach）。origin は "requir
   const feedbackHistory: string[] = [];
   let passed = false;
   let lastTestOutput = "";
+  let lastReflection = ""; // D22 reflector の改善指示（LLM 既定）
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const fb = feedbackHistory.length
-      ? `\n## 前回の失敗（これに対処せよ・テストは改変禁止）\n${lastTestOutput.slice(0, 2000)}`
+      ? `\n## 前回の失敗（これに対処せよ・テストは改変禁止）\n${
+          lastReflection ? `改善指示: ${lastReflection}\n` : ""
+        }テスト出力:\n${lastTestOutput.slice(0, 1500)}`
       : "";
     const s5Prompt = `${readFileSync(MVP_PHASES["S5"]!.promptPath, "utf8")}
 
@@ -315,6 +342,12 @@ ${strategy.approach}
     if (cb.tripped()) {
       console.error(`[S5] Circuit Breaker tripped (${cb.reason()}) → 打ち切り`);
       break;
+    }
+    // D22 reflector（既定=LLM）: 失敗理由→改善指示を生成し次試行に注入。
+    // TAIKAI_REFLECTOR=template で素の失敗出力注入のみ（opt-in 緩和）。
+    if (attempt < maxAttempts && process.env["TAIKAI_REFLECTOR"] !== "template") {
+      lastReflection = await reflect(spec, code, lastTestOutput);
+      console.log(`[S5]   reflect: ${lastReflection.slice(0, 80)}`);
     }
   }
   phaseCompleted(runDir, "S5", passed ? "ok" : "partial");
