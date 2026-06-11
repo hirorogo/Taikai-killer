@@ -71,6 +71,22 @@ async function main(): Promise<void> {
       await runExperiment(runDir, { rounds, topK });
       break;
     }
+    case "quest": {
+      // 標準化フレームワーク: クエストを GA で自律最適化（LLM不要・numeric）
+      const { runQuest } = await import("./quest/runQuest.ts");
+      const { xqAdapter } = await import("./quest/xqAdapter.ts");
+      const adapter = xqAdapter; // 現状 X Quest(7並べ)のみ。AI/Data/Robo は同 adapter 形で追加予定
+      const generations = Number(getOpt("generations") ?? 15);
+      const seed = Number(getOpt("seed") ?? 42);
+      const init = await adapter.evaluate(adapter.initialCandidate());
+      console.log(`[quest:${adapter.questId}] initial fitness=${init.toFixed(3)}`);
+      const res = await runQuest(adapter, { seed, generations, submissionDir: "quests/xq-7narabe" });
+      console.log(
+        `[quest] best fitness=${res.bestScore.toFixed(3)} (evals=${res.evaluations}, improved=${res.bestScore >= init})`,
+      );
+      console.log(`[quest] best=${JSON.stringify(res.best)} → submission 書き出し済み`);
+      break;
+    }
     case "status": {
       // run ディレクトリの要約（フェーズ進捗・結果・leaderboard 上位）
       const { summarizeRun } = await import("./runSummary.ts");
@@ -79,7 +95,7 @@ async function main(): Promise<void> {
       break;
     }
     default:
-      console.error("usage: taikai <probe|run|doctor|status|evolve|experiment> [--run-dir <path>] [--rounds N] [--topK N] [--seed N] [--iterations N]");
+      console.error("usage: taikai <probe|run|doctor|status|evolve|experiment|quest> [--run-dir <path>] [--quest xq] [--generations N] [--rounds N] [--topK N] [--seed N] [--iterations N]");
       process.exit(2);
   }
 }
