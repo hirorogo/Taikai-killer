@@ -107,6 +107,7 @@ README で未決だった点。**フォルダ構造で確定**。
 ### D4. マルチエージェント抽象インターフェース ✅確定
 - **確定: Claude + Gemini の2つ、CLI を subprocess で駆動**（サブスク認証をそのまま利用）。codex/ollama/copilot は将来拡張（未実装は exit 2）。
 - runtime は **CLI subprocess 型**で統一（speca の HTTP `APIRunner` 階層はサブスク CLI には流用不可。CLI 用に別設計）。CLI は機械可読モード（`--output-format json`/stream-json 等）で叩き、装飾 stdout パースは禁止。各 subprocess に**ハード timeout** 必須、timeout kill 時は `status:"error"` partial を書いてから次へ。
+- **✅ 実証済み（リスク済）**: claude/gemini CLI を subprocess で駆動する方式は **speca で実証済み**。実装は vendor 済みの `dashboard/server/services/chat_runtime_cli.py` / `chat_runtime_gemini.py`（Python）を **TS に移植**するだけ＝研究リスクなし・機械的作業。これが `runtimeRegistry.ts` / `claudeRunner.ts` / `geminiRunner.ts` の移植元。
 - フェーズ×モデルは config で手動指定。フォールバック順（落ちたら次モデル）も定義。
 - **フォールバック判定は OutcomeTracker（コードレベル統計）で持つ**（流用: SWE-Squad）。各 CLI dispatch 直後に `record({phase,agent,success,emptyResult,durationMs,error})`、agent ごと `consecutiveFailures>=3` で `isAgentHealthy=false`→そのフェーズの dispatch 対象から外し残モデルへ。状態は `outputs/{run}/AGENT_HEALTH.json`（状態DB禁止と整合）。LLM の都度判断でなくローリング統計で E_AGENT_CONFIG/E_LLM_COMM を発火。
 
