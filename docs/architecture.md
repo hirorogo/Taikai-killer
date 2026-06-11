@@ -162,6 +162,7 @@ interface Question { id: string; text: string; reason: string; answered?: string
 interface Definition { term: string; meaning: string; edge_case?: string; }          // 定義.json
 interface Subject { theme: string; constraints: string[]; rule_free?: boolean; }     // 題材.json
 interface ScoringRubric {                 // SCORING_RUBRIC.json ← S1 が大会ルールから導出
+  eval_mode: "test" | "battle";           // ★S6 の評価モード（テスト通過型 / 対戦型）
   metrics: { name: string; weight: number; direction: "max" | "min" }[]; // 評価軸と配点
   forbidden: string[];                    // 禁止事項（報酬ハック対策）
   derived_from: string;                   // 由来した大会ルール（TOURNAMENT_INFO / 定義.json の id）
@@ -220,20 +221,38 @@ interface CodegenResult {
   finalFeedback?: string;      // 失敗時の最後の教訓
 }
 
-// S6 ベンチマーク（README: 6.result.json）
+// S6 ベンチマーク（README: 6.result.json）。★評価は2モード（eval_mode で分岐）
 interface BenchResult {
   result_id: string;        // 1 result = S1..S6 の1周
   strategy_id: string;      // どの戦略の結果か（provenance.derived_from にも入る）
   rubric_ref: string;       // ★どの ScoringRubric(=S1由来) で測ったか
+  eval_mode: "test" | "battle"; // ①テスト通過型 / ②対戦型（SCORING_RUBRIC.eval_mode 由来）
   score: number;
   rank: number;             // 現在1位 など
   metrics: Record<string, number>;
-  passed_test_ratio: number; // 最小スコアの一次指標
+  passed_test_ratio?: number; // ①テスト型の一次指標
+  win_rate?: number;          // ②対戦型の一次指標（総当たり/トーナメントの勝率）
+  battle?: {                  // ②対戦型の詳細（誰と何戦してどう勝ったか＝来歴）
+    opponents: string[];      // 対戦相手 strategy_id 群
+    record: { wins: number; losses: number; draws: number };
+    format: "round_robin" | "tournament";
+  };
   distance?: number;        // graded distance（direction:min 指標／MVPは予約のみ）
   diff_vs_prev?: number;    // 対照実験の定量差
   threshold: { name: string; value: number }[]; // 閾値・遺伝子セッション
 }
 ```
+
+### S6 の2評価モード（`SCORING_RUBRIC.eval_mode`）
+
+| モード | 採点方法 | 例 |
+|---|---|---|
+| **① テスト通過型** `test` | 大会の I/O テストを実行し `passed_test_ratio`＋実行時間で採点（D22 のテスト判定をそのまま採点に流用） | 競プロ・実装課題 |
+| **② 対戦型** `battle` | **戦略同士を実際に対戦させ勝率で採点**。同一 run 内の戦略プール＋`leaderboard` 上位を相手に **round-robin / トーナメント**で総当たり、`win_rate` を score に | じゃんけん・ゲームAI・敵対的タスク |
+
+- どちらのモードかは **S1 が大会ルールから導出**して `SCORING_RUBRIC.eval_mode` に入れる（大会依存）。
+- **②対戦型は LLM 非依存の評価関数**（生成済みプログラム同士を対戦させてスコアを返す）＝ 数値最適化トラック（D18 ①）の評価器にそのまま使える。これにより「対戦させて勝った戦略のいいとこを交叉／パラメータを数万回チューニング」が回る。
+- 対戦の組み合わせ・勝敗は `battle` に記録し、`provenance.derived_from` に対戦相手を含めて**「誰と戦ってどう勝ったか」を遡れる**ようにする。
 
 **来歴チェーンの例**（result.json から大会ルールまで遡れる）:
 `BenchResult` → `derived_from: [strategy_id]` → `Strategy.derived_from: [crawledUrl_id, requirement_id]` → `CrawledUrl.source_ref: "https://..."` / `Requirement.derived_from: [definition_id]` → `Definition.derived_from: [tournament_rule]`。
