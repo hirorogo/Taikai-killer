@@ -1,0 +1,29 @@
+{
+  "name": "taikai-killer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "大会で勝つための自律 AI ハーネス（設計フェーズ）。docs/ が設計の正。",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "taikai": "./orchestrator/index.ts"
+  },
+  "scripts": {
+    "taikai": "tsx orchestrator/index.ts",
+    "run": "tsx orchestrator/index.ts run",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "schemas:validate": "tsx orchestrator/schemas.ts --selfcheck"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8",
+    "@types/node": "^22.10.2"
+  }
+}
