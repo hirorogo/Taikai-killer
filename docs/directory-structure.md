@@ -74,7 +74,7 @@ orchestrator/
 ├── battle.ts            # ✅ round-robin 純集計＋じゃんけん優劣表（battle 分岐で配線）
 ├── battleRunner.ts      # ✅ 戦略プロセス同士の spawn 対戦 I/O（janken-run 実績。spawn 層はテスト外）
 ├── s6battle.ts          # ✅ battle→BenchResult 変換＋rank（battle 分岐で配線）
-├── resume.ts            # 🧪 partial glob スキャンで resume（D9）。**runner 未配線**＝AC5 未達の核心
+├── resume.ts            # 🧪 partial glob スキャンで resume（D9）。**resume.ts モジュールは runner 未配線**。ただし S3 段の resume は runner.ts の inline loadExistingS3() で別途動く（AC5 ⚠部分）
 ├── idempotency.ts       # 🧪 冪等キー生成（D10）。**runner 未配線**
 ├── idempotencyStore.ts  # 🧪 冪等マーカー集合（D10×D9）。**runner 未配線**（resume と組で「二重実行しない」未達）
 ├── s2.ts                # 🧪 S2 外部知見クロール＋知見INDEX（D7）。**runner 未配線**（MVP 仕様通りスキップ）
@@ -88,7 +88,7 @@ orchestrator/
 ├── schemas.ts           # ✅ ajv JSON Schema 検証（schemas.test 19）。speca: schemas.py
 ├── types.ts             # ✅ フェーズ間データ契約（TS型）
 ├── config.ts            # ✅ PhaseConfig / CB しきい値 / MVP_PHASES（speca: config.py）。予算追跡(costTracker)は未実装
-└── runSummary.ts        # 🧪 run サマリ生成（summarizeRun/foldPhases 純ロジック・観測用）。**runner/index 未配線**（dashboard-lite/readers.ts に I/O 委譲。Grep 確認: runner.ts も index.ts も import せず）
+└── runSummary.ts        # 🧪 run サマリ生成（summarizeRun/foldPhases 純ロジック・観測用）。**実在だが git untracked（未コミット）**・**runner/index 未配線**（dashboard-lite/readers.ts に I/O 委譲。Grep 確認: runner.ts も index.ts も import せず）
 ```
 
 > **未実装（ファイル不在）**: `queue.ts`/`batch.ts`（Work Queue/batch 分割）・`factory.ts`（ワーカー生成）・`watchdog.ts`（stuck 検知）・`costTracker.ts`（budget 追跡 D5）は **MVP スコープ外**で未着手。runner は 1 周・単一戦略のため queue/batch/factory を要さず、CB は circuitBreaker.ts に内包。
@@ -159,7 +159,7 @@ schemas/
 
 speca の実物 `outputs/2026-05-13T14-36-26Z-8802b47-openlist/` 形式をそのまま採用。
 
-> **実装注（2026-06-11）**: 「確定」なのは **ディレクトリ命名規約（partial / run dir / 状態3系統の配置）**まで。実 run が現に書く成果物（`result.json`/`partials/`/`events/`/`leaderboard.json`）は ✅実在だが、**`.taikai/runs/{id}/state.json`・`~/.taikai/runtime.json` の可変状態は runner 未配線**（[implementation-status.md](./implementation-status.md) AC5: resume/idempotency/state は実装＋テスト緑だが `runner.ts` が import せず＝「殺して再実行」は毎回やり直し）。下記ツリーに ✅/⚠ を併記する。
+> **実装注（2026-06-11）**: 「確定」なのは **ディレクトリ命名規約（partial / run dir / 状態3系統の配置）**まで。実 run が現に書く成果物（`result.json`/`partials/`/`events/`/`leaderboard.json`）は ✅実在だが、**`.taikai/runs/{id}/state.json`・`~/.taikai/runtime.json` の可変状態は runner 未配線**（[implementation-status.md](./implementation-status.md) AC5: `resume.ts`/`idempotencyStore.ts` モジュールは実装＋テスト緑だが `runner.ts` が import せず）。**ただし S3 段の resume は runner.ts の inline `loadExistingS3()` が `partials/` の S3 partial を消費して動く**＝「殺して再実行」しても S3 戦略は再生成されない（S5 attempt 単位の resume と idempotency 二重実行ガードだけが未配線）。下記ツリーに ✅/⚠ を併記する。
 
 ```
 outputs/                              # .gitignore（*.png/*.md だけ allowlist）
@@ -178,7 +178,7 @@ $TAIKAI_BACKUP_DIR/        # ✅ ★result確定ごとに複製（欠落6。back
 
 .taikai/                   # ⚠runner未配線: ★可変状態（成果物と分離 / steal E-2）— .gitignore
 └── runs/{id}/
-    └── state.json         # ⚠未配線: status / owner_pid / cancel_requested / budget（orphan検出用。resume/idempotency と同じく runner が未 import＝AC5 未達）
+    └── state.json         # ⚠未配線: status / owner_pid / cancel_requested / budget（orphan検出用。resume.ts/idempotencyStore.ts と同じく runner が未 import。なお S3 resume は inline loadExistingS3() で別経路で動く＝AC5 ⚠部分）
 ~/.taikai/runtime.json     # ⚠未配線: ユーザ永続選好（秘密は入れない＝環境変数のみ）
 ```
 

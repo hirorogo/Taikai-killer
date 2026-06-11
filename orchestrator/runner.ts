@@ -296,7 +296,16 @@ Strategy[] の JSON だけを出力（id/origin/approach）。origin は "requir
   let lastTestOutput = "";
   let lastReflection = ""; // D22 reflector の改善指示（LLM 既定）
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+  // resume（D9/AC5）: 既に通過した S5 attempt があり生成コードが残っていれば D22 ループをスキップ。
+  if (s5AlreadyPassed(runDir) && existsSync(join(projDir, manifest.entrypoint))) {
+    const re = await runCmd(manifest.test_cmd, projDir, manifest.timeout_ms);
+    if (re.code === 0 && !re.timedOut) {
+      passed = true;
+      console.log("[S5] resume: 既存の通過コードを再利用（生成スキップ）");
+    }
+  }
+
+  for (let attempt = 1; !passed && attempt <= maxAttempts; attempt++) {
     const fb = feedbackHistory.length
       ? `\n## 前回の失敗（これに対処せよ・テストは改変禁止）\n${
           lastReflection ? `改善指示: ${lastReflection}\n` : ""
@@ -422,6 +431,22 @@ ${strategy.approach}
   if (bk.backedUp) console.log(`[backup] ${bk.copied.length} 件複製`);
   await notify(runDir, { type: "run_complete", passed, ratio, strategy: strategy.id });
   console.log(`[done] passed=${passed} ratio=${ratio}`);
+}
+
+/** resume: 通過済み S5 attempt（newly_passed_ids 非空）が partial にあるか（D9/AC5）。 */
+function s5AlreadyPassed(runDir: string): boolean {
+  const dir = partialsDir(runDir);
+  if (!existsSync(dir)) return false;
+  const files = readdirSync(dir).filter((f) => f.startsWith("S5_PARTIAL_") && f.endsWith(".json"));
+  for (const f of files) {
+    try {
+      const art = readJson<PhaseArtifact<CodeAttempt>>(join(dir, f));
+      if (art.status !== "error" && (art.payload?.newly_passed_ids?.length ?? 0) > 0) return true;
+    } catch {
+      /* skip */
+    }
+  }
+  return false;
 }
 
 /** resume: 既存 S3 partial（status!=="error"）から戦略を復元。無ければ null（D9/AC5）。 */

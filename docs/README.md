@@ -34,4 +34,4 @@ Taikai-killer の**狙い・設計・確定事項はすべてこの `docs/` に�
 - ✅ **縦串MVP が `result.json` を実生成**: test型（fizzbuzz）と battle型（janken）の両方が `taikai run` で `outputs/` に成果物を出した実績あり（`dev-run`/`fbp-run`/`janken-run`）。
 - ✅ **テスト**: `npx vitest run` = **25 ファイル / 333 テスト 全 pass**（純ロジックの vitest。LLM 発火・spawn 層はテスト外）。
 - ✅ **dashboard-lite**: outputs/leaderboard を read-only 提供する TS サーバを実装済み（runner とは別プロセス、実起動は未検証）。
-- ⚠️ **ただし MVP スコープ**: runner に配線済みは S3→S5→S6 の最小経路のみ。**S2 / resume / 冪等 / archiver / 進化ループ / Gemini 2モデル目 は実装＋テスト緑だが runner 未配線**（resume 未配線＝AC5 未達が最重要）。誇張せず、動く/テストのみ/未配線の区別は implementation-status.md に従う。
+- ⚠️ **ただし MVP スコープ**: runner に配線済みは S3→S5→S6 の最小経路のみ。**S2 / `resume.ts`・`idempotencyStore.ts` モジュール / archiver / 進化ループ / Gemini 2モデル目 は実装＋テスト緑だが runner 未配線**。resume は S3 段だけ runner の inline `loadExistingS3()` で動く（AC5 ⚠部分。未配線は S5 attempt 単位 resume と idempotency 二重実行ガード）。誇張せず、動く/テストのみ/未配線の区別は implementation-status.md に従う。

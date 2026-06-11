@@ -81,7 +81,7 @@
 |---|---|---|---|---|
 | `dashboard-lite/server.ts` | outputs/leaderboard を read-only 提供 | `dashboardLite.test.ts`(13) / `dashboardFull.test.ts`(17) / `dashboardSSE.test.ts`(8) | ❌(独立プロセス) | テストのみ。runner とは別プロセス、実起動は未検証 |
 | `dashboard-lite/readers.ts` | outputs read-only リーダ | 同上 | — | テストのみ |
-| `orchestrator/runSummary.ts` | run サマリ生成（`summarizeRun`/`foldPhases` 純ロジック・観測用。readers.ts に I/O 委譲） | `runSummary.test.ts` | ❌(runner/index 未import) | テストのみ・未配線（runner も index も import せず、観測用に独立） |
+| `orchestrator/runSummary.ts` | run サマリ生成（`summarizeRun`/`foldPhases` 純ロジック・観測用。readers.ts に I/O 委譲） | `runSummary.test.ts`（**git untracked**） | ❌(runner/index 未import) | テストのみ・未配線・**実在だが git untracked（未コミット）**（runner も index も import せず、観測用に独立） |
 | `dashboard/` (frontend) | speca から vendor した React UI | — | — | vendor 物・本プロジェクト未統合 |
 
 ---
@@ -106,7 +106,13 @@
 - プレイヤーは実 Python（`examples/toy-janken/players/{always-rock,beat-last,cycle}/player.py`）。
 - **動く（実 run 実績）**。spawn 対戦 I/O はユニットテスト外だが、実 run で 40 マッチ完走している。
 
-### 2.3 縦串に「入っていない」もの（MVP仕様通り）
+### 2.3 test型（toy-hard / ローマ数字）— ✅実通
+
+- `outputs/hard-run/result.json`: `eval_mode:"test"`, `strategy_id:"S3-roman-tablemap"`, `rubric_ref:"toy-hard-roman-rules"`, `passed_test_ratio:1`, `rank:1`。
+- 入力は `examples/toy-hard/`（commit 6371b03 で tracked: TOURNAMENT_INFO/SCORING_RUBRIC/spec.md/tests/test_roman.py）。S3 hardening（JSON 厳格リトライ）と S3 resume を検証した難問 run。
+- **動く（実 run 実績）**。LLM 発火は §2.1 同様に自動テスト範囲外。
+
+### 2.4 縦串に「入っていない」もの（MVP仕様通り）
 
 mvp-vertical-slice.md の原則「無限ループ・S2大量クロール・S4独立・並列・進化・island・2モデル目は入れない」に沿って、runner は **1周だけ・S2/S4スキップ・単一戦略のみ S5 実装**。これは欠陥ではなく**スコープ通り**。ただし下記の AC 未達（resume）は MVP の DoD に含まれており、別問題（§4 参照）。
 
