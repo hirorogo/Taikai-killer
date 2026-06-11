@@ -8,3 +8,7 @@ outputs/
 # dashboard (vendored) build/deps
 dashboard/frontend/node_modules/
 dashboard/frontend/dist/
+
+# Node
+node_modules/
+dist/

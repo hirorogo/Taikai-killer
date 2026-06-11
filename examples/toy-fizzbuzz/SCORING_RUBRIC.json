@@ -1,0 +1,6 @@
+{
+  "eval_mode": "test",
+  "metrics": [{ "name": "passed_test_ratio", "weight": 1.0, "direction": "max" }],
+  "forbidden": ["テスト/評価器の改変", "tests/ ディレクトリへの書き込み"],
+  "derived_from": "toy-fizzbuzz-rules"
+}

@@ -8,6 +8,8 @@ export interface GenerateInput {
   system?: string;
   prompt: string;
   timeoutMs: number;
+  /** フェーズ別ツール許可（集中力ガード）。空=全ツール無効（純粋な生成/Q&A）。 */
+  allowedTools?: string[];
 }
 export interface GenerateOutput {
   text: string; // CLI の機械可読出力から抽出した本文
