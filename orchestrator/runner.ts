@@ -17,7 +17,8 @@ import { join, relative } from "node:path";
 import { runCLISubprocess } from "./runtimeRegistry.ts";
 import { MVP_PHASES } from "./config.ts";
 import { notify } from "./notify.ts";
-import { pipelineStarted, phaseCompleted } from "./events.ts";
+import { pipelineStarted, phaseStarted, phaseCompleted } from "./events.ts";
+import { archiveRun } from "./archiver.ts";
 import { CircuitBreaker } from "./circuitBreaker.ts";
 import { dedupStrategies } from "./collector.ts";
 import { validateArtifact } from "./validate.ts";
@@ -211,6 +212,7 @@ export async function runSlice(runDir: string): Promise<void> {
   }
 
   // ── S3 戦略生成（cold-start: requirement/subject のみ）──
+  phaseStarted(runDir, "S3");
   console.log("[S3] 戦略生成…");
   const s3Prompt = `${readFileSync(MVP_PHASES["S3"]!.promptPath, "utf8")}
 
@@ -267,6 +269,7 @@ Strategy[] の JSON だけを出力（id/origin/approach）。origin は "requir
   phaseCompleted(runDir, "S3", "ok");
 
   // ── S5 コード生成（D22 Reflexion ループ）──
+  phaseStarted(runDir, "S5");
   console.log("[S5] D22 ループ…");
   const cb = new CircuitBreaker();
   const projDir = join(runDir, "projects", strategy.id);
@@ -296,7 +299,16 @@ Strategy[] の JSON だけを出力（id/origin/approach）。origin は "requir
   let lastTestOutput = "";
   let lastReflection = ""; // D22 reflector の改善指示（LLM 既定）
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+  // resume（D9/AC5）: 既に通過した S5 attempt があり生成コードが残っていれば D22 ループをスキップ。
+  if (s5AlreadyPassed(runDir) && existsSync(join(projDir, manifest.entrypoint))) {
+    const re = await runCmd(manifest.test_cmd, projDir, manifest.timeout_ms);
+    if (re.code === 0 && !re.timedOut) {
+      passed = true;
+      console.log("[S5] resume: 既存の通過コードを再利用（生成スキップ）");
+    }
+  }
+
+  for (let attempt = 1; !passed && attempt <= maxAttempts; attempt++) {
     const fb = feedbackHistory.length
       ? `\n## 前回の失敗（これに対処せよ・テストは改変禁止）\n${
           lastReflection ? `改善指示: ${lastReflection}\n` : ""
@@ -381,6 +393,7 @@ ${strategy.approach}
   phaseCompleted(runDir, "S5", passed ? "ok" : "partial");
 
   // ── S6 ベンチマーク（test型 / 改変検知）──
+  phaseStarted(runDir, "S6");
   console.log("[S6] 採点…");
   const testNow = hashDir(projTests);
   if (testNow !== testFrozen) {
@@ -420,8 +433,26 @@ ${strategy.approach}
   });
   const bk = backupResult(runDir); // 欠落6: TAIKAI_BACKUP_DIR があれば成果物を複製
   if (bk.backedUp) console.log(`[backup] ${bk.copied.length} 件複製`);
+  const arch = archiveRun(runDir); // run アーカイブ・マニフェスト（sha256）
+  writeJson(join(runDir, "archive_manifest.json"), arch);
   await notify(runDir, { type: "run_complete", passed, ratio, strategy: strategy.id });
   console.log(`[done] passed=${passed} ratio=${ratio}`);
+}
+
+/** resume: 通過済み S5 attempt（newly_passed_ids 非空）が partial にあるか（D9/AC5）。 */
+function s5AlreadyPassed(runDir: string): boolean {
+  const dir = partialsDir(runDir);
+  if (!existsSync(dir)) return false;
+  const files = readdirSync(dir).filter((f) => f.startsWith("S5_PARTIAL_") && f.endsWith(".json"));
+  for (const f of files) {
+    try {
+      const art = readJson<PhaseArtifact<CodeAttempt>>(join(dir, f));
+      if (art.status !== "error" && (art.payload?.newly_passed_ids?.length ?? 0) > 0) return true;
+    } catch {
+      /* skip */
+    }
+  }
+  return false;
 }
 
 /** resume: 既存 S3 partial（status!=="error"）から戦略を復元。無ければ null（D9/AC5）。 */

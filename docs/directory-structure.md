@@ -57,29 +57,43 @@ speca `scripts/orchestrator/`（Python）の実ファイルを **TS に移植**�
 runtime は **claude / gemini の CLI を subprocess で駆動**（サブスク認証をそのまま利用、従量課金なし）。
 
 （TS 移植。`speca: <name>.py` は移植元）
+
+> **実装注（2026-06-11 Grep 確認）**: 下記ツリーは設計上の理想形。実在ファイルに **✅実装済み（runner 配線済み）／🧪テストのみ（実装＋vitest 緑だが runner 未配線）／⚠未実装** を併記する。判定とテスト数の正は [implementation-status.md](./implementation-status.md)（`npx vitest run` = 26ファイル・349テスト全 pass を実測。数値は当該ファイルに集約し、本ファイルからは参照のみ）。`queue.ts`/`batch.ts`/`factory.ts`/`watchdog.ts`/`costTracker.ts` は **未実装（ファイルなし）** で、当該責務は runner.ts に内包または MVP スコープ外。
+
 ```
 orchestrator/
-├── index.ts
-├── runner.ts            # フェーズ実行の中核（speca: runner.py）
+├── index.ts             # ✅ CLI エントリ（probe/run/doctor/evolve を dispatch。claude+gemini register）
+├── runner.ts            # ✅ 縦串本体 S3→S5→S6＋battle 分岐（runSlice/doctor を export）。speca: runner.py
 ├── runtimes/
-│   ├── claudeRunner.ts  # claude CLI subprocess（機械可読モード）
-│   └── geminiRunner.ts  # gemini CLI subprocess
-├── runtimeRegistry.ts   # ★Claude/Gemini の2ランナー登録（D19）。codex等は将来
-├── queue.ts             # Work Queue / batch 分割（speca: queue.py, batch.py）
-├── batch.ts
-├── collector.ts         # 並列ワーカー出力の統廃合・dedup＋provenance DAG検証（speca: collector.py）
-├── factory.ts           # フェーズ→ワーカー生成（speca: factory.py）
-├── resume.ts            # 再開（partial の glob スキャンが真実源／D9）
-├── watchdog.ts          # 停滞/暴走検知（D11：stuck 5パターン＋除外窓）
-├── circuitBreaker.ts    # 連続失敗/総リトライ/連続空出力でトリップ（D11）
-├── costTracker.ts       # call数/時間/budget 追跡・90%早期停止（D5）
-├── idempotency.ts       # ★親id集合ベースの処理済みマーカー（出力キャッシュではない／D10）
-├── events.ts            # append-only イベント書込（観測/再現用、resume非依存／D9）
-├── archiver.ts          # run のアーカイブ（speca: archiver.py）
-├── paths.ts             # outputs パス規約（speca: paths.py）
-├── schemas.ts           # スキーマロード/検証（speca: schemas.py）
-└── config.ts            # フェーズ×モデル割当・CB閾値・予算・進化ハイパラ（speca: config.py）
+│   ├── claudeRunner.ts  # ✅ claude CLI subprocess（実 run で S3/S5 生成実績。spawn 層は未テスト）
+│   ├── geminiRunner.ts  # 🧪 gemini CLI subprocess（register 済/全フェーズ claude 固定＝未使用。認証未設定で error.code=41）
+│   └── geminiMcp.ts     # 🧪 gemini MCP 連携の知見（未配線）
+├── runtimeRegistry.ts   # ✅ Claude/Gemini の2ランナー登録＋runCLISubprocess（D4/D19）。codex等は将来
+├── collector.ts         # ✅ S3 戦略 dedup（純ロジック。runner 配線済み）。speca: collector.py
+├── validate.ts          # ✅ 検証ラッパ（ajv 委譲）。runner 配線済み
+├── battle.ts            # ✅ round-robin 純集計＋じゃんけん優劣表（battle 分岐で配線）
+├── battleRunner.ts      # ✅ 戦略プロセス同士の spawn 対戦 I/O（janken-run 実績。spawn 層はテスト外）
+├── s6battle.ts          # ✅ battle→BenchResult 変換＋rank（battle 分岐で配線）
+├── resume.ts            # 🧪 partial glob スキャンで resume（D9）。**resume.ts モジュールは runner 未配線**。ただし S3 段の resume は runner.ts の inline loadExistingS3() で別途動く（AC5 ⚠部分）
+├── idempotency.ts       # 🧪 冪等キー生成（D10）。**runner 未配線**
+├── idempotencyStore.ts  # 🧪 冪等マーカー集合（D10×D9）。**runner 未配線**（resume と組で「二重実行しない」未達）
+├── s2.ts                # 🧪 S2 外部知見クロール＋知見INDEX（D7）。**runner 未配線**（MVP 仕様通りスキップ）
+├── crawl.ts             # 🧪 Python サイドカー呼び出し（s2 経由のみ）。実 spawn は未検証
+├── circuitBreaker.ts    # ✅ 連続失敗5/総リトライ20/連続空3 でトリップ（D11。S5 ループで配線）。stall 検出は未実装
+├── events.ts            # ✅ append-only イベント書込（D9 write-only。runner 配線済み）
+├── notify.ts            # ✅ best-effort 通知（欠落5。runner 配線済み）
+├── backup.ts            # ✅ 成果物バックアップ（欠落6。TAIKAI_BACKUP_DIR 未設定なら no-op）
+├── archiver.ts          # 🧪 run アーカイブ（zstd tarball / steal E-6）。**runner 未配線**。speca: archiver.py
+├── paths.ts             # ✅ outputs パス規約（D2。runner 配線済み）。speca: paths.py
+├── schemas.ts           # ✅ ajv JSON Schema 検証（schemas.test 19）。speca: schemas.py
+├── types.ts             # ✅ フェーズ間データ契約（TS型）
+├── config.ts            # ✅ PhaseConfig / CB しきい値 / MVP_PHASES（speca: config.py）。予算追跡(costTracker)は未実装
+└── runSummary.ts        # 🧪 run サマリ生成（summarizeRun/foldPhases 純ロジック・観測用）。**実在だが git untracked（未コミット）**・**runner/index 未配線**（dashboard-lite/readers.ts に I/O 委譲。Grep 確認: runner.ts も index.ts も import せず）
 ```
+
+> **未実装（ファイル不在）**: `queue.ts`/`batch.ts`（Work Queue/batch 分割）・`factory.ts`（ワーカー生成）・`watchdog.ts`（stuck 検知）・`costTracker.ts`（budget 追跡 D5）は **MVP スコープ外**で未着手。runner は 1 周・単一戦略のため queue/batch/factory を要さず、CB は circuitBreaker.ts に内包。
+
+> **CLI 到達点（index.ts 実測）**: `taikai probe`（claude CLI 駆動確認）/ `taikai run`（縦串 1 周）/ `taikai doctor`（起動前バリデータ）/ `taikai evolve`（D18① じゃんけん数値進化デモ）の4コマンドが dispatch される。
 
 ---
 
@@ -87,20 +101,23 @@ orchestrator/
 
 speca の `<phase><sub>_<role>.md` を Taikai-killer の S1..S6 に対応させる。
 
+> **実装注（2026-06-11 Glob 確認）**: 下記ツリーは設計上の理想形（命名規約の目標形）。**実在は 3 ファイルのみ**で、命名も実態とドキュメントで食い違う（実 `S1_rules.md` ⇄ 設計 `S1a_rules_extract.md`）。orchestrator セクションと同様に **✅実在／⚠未作成** を併記する。実ファイル名を確定命名規約に寄せるか、本ツリーを実態へ畳むかは未決（命名規約の最終確定はこのファイルの外で詰める）。
+
 ```
 prompts/
-├── S1a_rules_extract.md       # 大会ルール抽出
-├── S1d_edge_questions.md      # きわどい定義→質問.json
-├── S2a_search_words.md        # 検索ワード生成
-├── S2b_crawl_worker.md        # クロール（Scrapling/playwright）
-├── S2c_paper_worker.md        # 論文（Semantic Scholar）
-├── S3_strategy_worker.md      # 戦略大量生成
-├── S4_requirement_refine.md   # 要件精緻化
-├── S5_codegen_worker.md       # コード生成（自己改善）
-├── S5_selfimprove.md          # S5 自己改善＝Reflexion ループ（D22。旧「D21 evaluator-optimizer」を統合改名）
-├── S6_benchmark.md            # ベンチ評価
-├── _self_improve.md           # 自己改善（presentation-agent 10/11 準拠）
-└── _template.md → templates/template.md（文体統一の単一ソース）
+├── S1_rules.md                # ✅実在: 大会ルール抽出（設計名 S1a_rules_extract.md ⇄ 実 S1_rules.md で命名乖離）
+├── S3_strategy.md             # ✅実在: 戦略大量生成（設計名 S3_strategy_worker.md ⇄ 実 S3_strategy.md）
+├── S5_selfimprove.md          # ✅実在: S5 自己改善＝Reflexion ループ（D22。旧「D21 evaluator-optimizer」を統合改名）
+│   # ---- 以下 ⚠未作成（設計上の理想形・ファイル不在）----
+├── S1d_edge_questions.md      # ⚠未作成: きわどい定義→質問.json
+├── S2a_search_words.md        # ⚠未作成: 検索ワード生成
+├── S2b_crawl_worker.md        # ⚠未作成: クロール（Scrapling/playwright）
+├── S2c_paper_worker.md        # ⚠未作成: 論文（Semantic Scholar）
+├── S4_requirement_refine.md   # ⚠未作成: 要件精緻化
+├── S5_codegen_worker.md       # ⚠未作成: コード生成（自己改善・S5_selfimprove と分離する場合）
+├── S6_benchmark.md            # ⚠未作成: ベンチ評価
+├── _self_improve.md           # ⚠未作成: 自己改善（presentation-agent 10/11 準拠）
+└── _template.md → templates/template.md（⚠未作成・文体統一の単一ソース）
 ```
 
 - **版管理（D20 / steal E-4）**: 各 prompt は**イミュータブル**。自己改善ループの成果は `prompts/locked/<phase>/v{n}.md`＋`manifest.json`（baseline/improved スコア・コスト・seed・dataset_hash を記録＝プロバナンス完全保全）に固定。`config.py` の `prompt_override_path`＋`--locked` で baseline⇄改善版を切替。
@@ -111,34 +128,29 @@ prompts/
 
 ## schemas/（フェーズ間 JSON 契約 — speca 3層＋メタ）
 
-speca の `Phase*Partial` / `*Event` / `RunManifest` / `PartialMetadata` をそのまま型ドメインだけ差し替える。
+speca の `Phase*Partial` / `*Event` / `RunManifest` / `PartialMetadata` を型ドメインだけ差し替える設計だが、**実在は下記 10 ファイルのみ**（実数の正は [implementation-status.md](./implementation-status.md) D2 行）。orchestrator/prompts セクションと同様に **✅実在／⚠未作成** を分離する。
+
+> **実装注（2026-06-11 Glob 確認）**: schemas/ には `schemas.ts`(ajv selfcheck 緑) が検証する 10 個の `*.schema.json` が実在。`RunManifest`/`PartialMetadata`/各 `*Event`/各 `S{n}Partial`/`Question`/`Definition`/`Subject`/`SearchWord`/`CrawledUrl`/`Requirement` は **未作成（設計上の理想形）**。
 
 ```
 schemas/
-├── PhaseArtifact.schema.json        # 共通エンベロープ（architecture.md）
-├── PartialMetadata.schema.json      # worker/batch/timestamp/idempotency_key
-├── RunManifest.schema.json          # ★再現性: model完全ID/seed/temp/commit/prompt_hash（D17）
-│   # ---- データ型（payload）----
-├── Question.schema.json             # 質問.json
-├── Definition.schema.json           # 定義.json
-├── Subject.schema.json              # 題材.json
-├── SearchWord.schema.json           # 検索ワード.json
-├── CrawledUrl.schema.json           # urlクロール.json
-├── Strategy.schema.json             # 戦略_*.json
-├── Requirement.schema.json          # 要件定義_*.json
-├── BenchResult.schema.json          # result.json
-│   # ---- フェーズ partial（speca: Phase0XPartial）----
-├── S1Partial.schema.json
-├── S2Partial.schema.json
-├── S3Partial.schema.json … S6Partial.schema.json
-│   # ---- イベント（append-only / D9）----
-├── PipelineStartedEvent.schema.json
-├── PhaseStartedEvent.schema.json
-├── PhaseCompletedEvent.schema.json
-├── PhaseFailedEvent.schema.json
-├── CircuitBreakerTrippedEvent.schema.json   # speca に実在
-├── BudgetExceededEvent.schema.json          # speca に実在
-└── PipelineCompletedEvent.schema.json
+│   # ---- ✅実在 10 ファイル（schemas.ts が selfcheck）----
+├── BenchResult.schema.json          # ✅ result.json
+├── CodeAttempt.schema.json          # ✅ S5 単一試行（D22 Reflexion の1 attempt）
+├── CodegenResult.schema.json        # ✅ S5 生成結果（feedbackHistory 含む）
+├── LeaderboardEntry.schema.json     # ✅ leaderboard.json の1行
+├── PhaseArtifact.schema.json        # ✅ 共通エンベロープ（architecture.md）
+├── ProjectManifest.schema.json      # ✅ projects/{id}/manifest.json（language/run_cmd/test_cmd）
+├── Provenance.schema.json           # ✅ derived_from プロバナンス
+├── ScoringRubric.schema.json        # ✅ SCORING_RUBRIC.json
+├── Strategy.schema.json             # ✅ 戦略_*.json
+├── TournamentInfo.schema.json       # ✅ TOURNAMENT_INFO.json
+│   # ---- ⚠未作成（設計上の理想形・ファイル不在）----
+├── RunManifest.schema.json          # ⚠未作成: ★再現性 model完全ID/seed/temp/commit/prompt_hash（D17）
+├── PartialMetadata.schema.json      # ⚠未作成: worker/batch/timestamp/idempotency_key
+├── Question / Definition / Subject / SearchWord / CrawledUrl / Requirement  # ⚠未作成: payload データ型
+├── S1Partial … S6Partial.schema.json                                        # ⚠未作成: フェーズ partial（speca: Phase0XPartial）
+└── *Event.schema.json (PipelineStarted/PhaseStarted/PhaseCompleted/PhaseFailed/CircuitBreakerTripped/BudgetExceeded/PipelineCompleted)  # ⚠未作成: append-only イベント（D9）
 ```
 
 ---
@@ -147,25 +159,27 @@ schemas/
 
 speca の実物 `outputs/2026-05-13T14-36-26Z-8802b47-openlist/` 形式をそのまま採用。
 
+> **実装注（2026-06-11）**: 「確定」なのは **ディレクトリ命名規約（partial / run dir / 状態3系統の配置）**まで。実 run が現に書く成果物（`result.json`/`partials/`/`events/`/`leaderboard.json`）は ✅実在だが、**`.taikai/runs/{id}/state.json`・`~/.taikai/runtime.json` の可変状態は runner 未配線**（[implementation-status.md](./implementation-status.md) AC5: `resume.ts`/`idempotencyStore.ts` モジュールは実装＋テスト緑だが `runner.ts` が import せず）。**ただし S3 段の resume は runner.ts の inline `loadExistingS3()` が `partials/` の S3 partial を消費して動く**＝「殺して再実行」しても S3 戦略は再生成されない（S5 attempt 単位の resume と idempotency 二重実行ガードだけが未配線）。下記ツリーに ✅/⚠ を併記する。
+
 ```
 outputs/                              # .gitignore（*.png/*.md だけ allowlist）
 └── {ISO8601}-{commit}-{tournament}/  # 1 run = S1 once → (S2..S6)*∞
-    ├── TOURNAMENT_INFO.json   # ★最小入力: 大会の識別（名前/URL/締切/言語/制約）E-1
-    ├── SCORING_RUBRIC.json    # ★最小入力: 評価軸/配点/禁止事項（ルブリック外部化）E-1
-    ├── events/        # append-only イベントログ（D9）
-    ├── partials/      # S{n}_PARTIAL_W{w}B{b}_{ts}.json（D2）
-    ├── logs/          # ワーカー別 trajectory（agent_id 付き / D15）
-    ├── graphs/        # 戦略系統・進化系統図
-    ├── submitted/     # 大会提出物（speca: submitted/）
-    ├── run_manifest.json   # 不変メタ＝再現性マニフェスト（D17）
-    └── result.json    # S6 レポート
-outputs/leaderboard.json   # ★run 横断の最強選抜（同一 rubric_ref で比較／欠落8）
-$TAIKAI_BACKUP_DIR/        # ★result確定ごとに result/manifest/partial を複製（欠落6。USB宛てはC:ステージ→robocopy /MT）
+    ├── TOURNAMENT_INFO.json   # ✅ ★最小入力: 大会の識別（名前/URL/締切/言語/制約）E-1
+    ├── SCORING_RUBRIC.json    # ✅ ★最小入力: 評価軸/配点/禁止事項（ルブリック外部化）E-1
+    ├── events/        # ✅ append-only イベントログ（D9。events.ts 配線済み）
+    ├── partials/      # ✅ S{n}_PARTIAL_W{w}B{b}_{ts}.json（D2。実 run で S3/S5 partial 実在）
+    ├── logs/          # ✅ ワーカー別 trajectory（agent_id 付き / D15）
+    ├── graphs/        # ⚠未作成: 戦略系統・進化系統図（進化ループ未配線のため未生成）
+    ├── submitted/     # ⚠未作成: 大会提出物（submit はレビューゲート止まり）
+    ├── run_manifest.json   # ⚠未作成: 不変メタ＝再現性マニフェスト（D17。RunManifest schema 自体も未作成）
+    └── result.json    # ✅ S6 レポート（実 run 実績あり）
+outputs/leaderboard.json   # ✅ ★run 横断の最強選抜（同一 rubric_ref で比較／欠落8。実 run で追記実績）
+$TAIKAI_BACKUP_DIR/        # ✅ ★result確定ごとに複製（欠落6。backup.ts 配線済み。未設定なら no-op。USB宛てはC:ステージ→robocopy /MT）
 
-.taikai/                   # ★可変状態（成果物と分離 / steal E-2）— .gitignore
+.taikai/                   # ⚠runner未配線: ★可変状態（成果物と分離 / steal E-2）— .gitignore
 └── runs/{id}/
-    └── state.json         # status / owner_pid / cancel_requested / budget（orphan検出用）
-~/.taikai/runtime.json     # ユーザ永続選好（秘密は入れない＝環境変数のみ）
+    └── state.json         # ⚠未配線: status / owner_pid / cancel_requested / budget（orphan検出用。resume.ts/idempotencyStore.ts と同じく runner が未 import。なお S3 resume は inline loadExistingS3() で別経路で動く＝AC5 ⚠部分）
+~/.taikai/runtime.json     # ⚠未配線: ユーザ永続選好（秘密は入れない＝環境変数のみ）
 ```
 
 - **命名規約（確定）**: partial = `S{n}_PARTIAL_W{worker}B{batch}_{ISO8601}.json`、run dir = `{ISO8601}-{git短縮hash}-{大会slug}`。
@@ -187,9 +201,13 @@ projects/                       # 戦略ごとに独立フォルダ（branch で
     └── bench/                  # この戦略のベンチ結果
 
 evolution/                      # 遺伝子セッション（D18）★初期スコープ外（run数が増えてから）
-├── pool.json                   # まず単一プール（戦略JSONの配列）で開始
-├── numericOptimizer.ts         # ★①数値最適化＝LLM不要。閾値/パラメータ/重みを GA/ヒルクライム等で回す
-└── config.ts                   # 進化ハイパラ（island化は後追い。island/移住周期は将来）
+│   # 実装注（2026-06-11 Glob 確認）: ✅実在=テスト緑の純ロジック / ⚠未作成。本番進化ループは runner 未配線（評価器D3確定まで意図的に起動しない＝設計通り）。
+├── numericOptimizer.ts         # 🧪実在: ★①数値最適化＝LLM不要（ヒルクライム/seed固定）。テスト緑・runner未配線
+├── jankenStrategy.ts           # 🧪実在: じゃんけん数値パラメータ戦略
+├── jankenEvolve.ts             # 🧪実在: 数値戦略を勝率で進化（D18①実証）。テスト緑・本番未配線
+├── evolveDemo.ts               # 🧪実在: D18① end-to-end デモ薄ラッパ
+├── pool.json                   # ⚠未作成: まず単一プール（戦略JSONの配列）で開始する設計
+└── config.ts                   # ⚠未作成: 進化ハイパラ（island化は後追い。island/移住周期は将来）
 ```
 
 > **D18 注（2トラック分離）**:

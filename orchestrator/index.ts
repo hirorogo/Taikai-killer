@@ -63,8 +63,15 @@ async function main(): Promise<void> {
       await doctor(runDir);
       break;
     }
+    case "status": {
+      // run ディレクトリの要約（フェーズ進捗・結果・leaderboard 上位）
+      const { summarizeRun } = await import("./runSummary.ts");
+      const d = summarizeRun(runDir);
+      console.log(JSON.stringify(d, null, 2));
+      break;
+    }
     default:
-      console.error("usage: taikai <probe|run|doctor|evolve> [--run-dir <path>] [--seed N] [--iterations N]");
+      console.error("usage: taikai <probe|run|doctor|status|evolve> [--run-dir <path>] [--seed N] [--iterations N]");
       process.exit(2);
   }
 }
