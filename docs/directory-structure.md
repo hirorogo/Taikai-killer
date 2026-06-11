@@ -41,7 +41,7 @@ Taikai-killer/
 ├── evolution/               # 遺伝子セッション＝island model（D18）
 ├── benchmarks/               # S6 評価ランナー・eval 定義（D17）
 ├── knowledge/                # S2 外部知見の収集物（クロール/論文）
-├── dashboard/                # Next.js + Slack/Discord bot（ヒューマンレビュー＝D6）
+├── dashboard/                # ★speca web/ を vendor（FastAPI + React/Vite）。run監視/結果/承認＝D6
 ├── presentation/             # 発表生成（presentation-agent を vendor）
 ├── outputs/                  # run 単位の成果物（.gitignore）
 ├── docs/                     # 設計ドキュメント（本ファイル群）

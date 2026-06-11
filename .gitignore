@@ -4,3 +4,7 @@ research/
 # フェーズ出力（中間JSON・ログ）
 outputs/
 *.log
+
+# dashboard (vendored) build/deps
+dashboard/frontend/node_modules/
+dashboard/frontend/dist/
