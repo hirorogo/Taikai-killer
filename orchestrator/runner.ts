@@ -19,6 +19,9 @@ import { MVP_PHASES } from "./config.ts";
 import { notify } from "./notify.ts";
 import { pipelineStarted, phaseCompleted } from "./events.ts";
 import { CircuitBreaker } from "./circuitBreaker.ts";
+import { dedupStrategies } from "./collector.ts";
+import { validateArtifact } from "./validate.ts";
+import { backupResult } from "./backup.ts";
 import {
   partialsDir,
   logsDir,
@@ -230,6 +233,11 @@ Strategy[] の JSON だけを出力（id/origin/approach）。origin は "requir
     console.error("[S3] cold-start で使える戦略が0");
     process.exit(1);
   }
+  const beforeDedup = strategies.length;
+  strategies = dedupStrategies(strategies); // 被り・類似戦略を統合（merged_from 記録）
+  if (strategies.length < beforeDedup) {
+    console.log(`[S3] 統合: ${beforeDedup}→${strategies.length}`);
+  }
   strategies.forEach((s, i) =>
     writePartial(runDir, "S3", 0, i, s, prov("S3", [`rubric:${rubric.derived_from}`])),
   );
@@ -374,6 +382,8 @@ ${strategy.approach}
     passed_test_ratio: ratio,
     threshold: [],
   };
+  const check = validateArtifact("BenchResult", result); // 契約検証（非throw・警告のみ）
+  if (!check.valid) console.warn(`[S6] ⚠ result が BenchResult 契約に不一致: ${check.message}`);
   writeJson(resultPath(runDir), result);
   phaseCompleted(runDir, "S6", "ok");
   console.log(`[S6] passed_test_ratio=${ratio} → ${resultPath(runDir)}`);
@@ -388,6 +398,8 @@ ${strategy.approach}
     result_ref: resultPath(runDir),
     ts: isoNow(),
   });
+  const bk = backupResult(runDir); // 欠落6: TAIKAI_BACKUP_DIR があれば成果物を複製
+  if (bk.backedUp) console.log(`[backup] ${bk.copied.length} 件複製`);
   await notify(runDir, { type: "run_complete", passed, ratio, strategy: strategy.id });
   console.log(`[done] passed=${passed} ratio=${ratio}`);
 }
