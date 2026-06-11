@@ -64,6 +64,134 @@ Taikai-killer は**1回だけのブートストラップ S1 ＋ 無限ループ 
 
 ---
 
+## Usage / Quickstart
+
+> [!NOTE]
+> 全体（S1〜S6 の無限ループ・並列・進化）は**設計フェーズ**だが、**縦串MVP**（1大会で1 result を出す最小経路 S3→S5→S6）と各種ツールは**実際に動く**。ここに書くのは現時点で動く範囲のみ。
+
+### 前提
+
+- **Node.js >= 20**（`package.json` engines）。
+- example の実行・採点には **Python 3**（同梱 example は `python` で test/対戦する）。
+- `run` / `probe` だけは **`claude` CLI** がログイン済みで PATH にあること（subprocess で駆動）。`typecheck` / `test` / `evolve` / `dashboard` は **CLI 不要**。
+
+### セットアップ
+
+```bash
+npm install        # 依存は ajv のみ（実行は tsx / vitest / typescript）
+npm run typecheck  # tsc --noEmit（strict / NodeNext）。exit 0 で型OK
+npm test           # vitest run — 333 tests / 25 files（純ロジックのみ）
+```
+
+### CLI コマンド一覧
+
+`npm run taikai -- <cmd>`（= `tsx orchestrator/index.ts <cmd>`）。
+
+| コマンド | 役割 | LLM CLI |
+|---|---|---|
+| `probe` | D4 検証: `claude` CLI が driveできるか最小プロンプトで確認 | 必要 |
+| `doctor --run-dir <dir>` | 起動前バリデータ: `TOURNAMENT_INFO.json` 必須キー / `SCORING_RUBRIC.json` を確認 | 不要 |
+| `run --run-dir <dir>` | 縦串MVP を1周（test型: S3→S5→S6 / battle型: S6 対戦） | 必要 |
+| `evolve --seed N [--iterations N]` | D18① 数値最適化（じゃんけん重みを LLM 非依存で進化） | 不要 |
+
+```bash
+npm run taikai -- probe          # [probe] claude available: true / exit 0
+```
+
+### D18① 数値進化（LLM 不要・決定論的）
+
+固定相手群への勝率を評価関数に、じゃんけんの重みパラメータをヒルクライムで進化させる。seed 固定で完全再現、Claude/Gemini を一切呼ばない。
+
+```bash
+npm run taikai -- evolve --seed 7
+# [evolve] win_rate 0.505 -> 0.593 (improved=true)
+# [evolve] evolvedParams={"rock":-0.589...,"paper":3.180...,"scissors":-0.566...}
+# 改善したら exit 0、しなければ exit 1
+```
+
+### `run` — 縦串MVP（1大会 = 1 result）
+
+`run` は **`--run-dir` に置いた run ディレクトリ** を読む。run ディレクトリには最低限 `TOURNAMENT_INFO.json` と `SCORING_RUBRIC.json`（test型は `spec.md` と `tests/` も）が要る。`examples/` の toy 大会を run ディレクトリへ **コピーしてから** `run` する。
+
+`SCORING_RUBRIC.eval_mode` で2モードに分岐：
+
+#### ① テスト通過型（`eval_mode: "test"`）— `examples/toy-fizzbuzz`
+
+S3 が戦略を生成 → S5 が `claude` CLI でコードを生成し `tests/` を通すまで自己改善（D22 Reflexion）→ S6 がテスト改変を sha256 で検知してから採点。
+
+```bash
+# 1) example を run ディレクトリへコピー
+cp -r examples/toy-fizzbuzz outputs/fizz   # PowerShell: Copy-Item -Recurse examples/toy-fizzbuzz outputs/fizz
+# 2) 入力検証（任意）→ 実行
+npm run taikai -- doctor --run-dir outputs/fizz
+npm run taikai -- run    --run-dir outputs/fizz
+```
+
+進む流れ（標準出力の例）:
+
+```
+[doctor] OK: toy-fizzbuzz (lang=python, test_source=provided)
+[S3] 戦略生成…
+[S5] D22 ループ…
+[S5]   attempt 1: PASS
+[S6] 採点…
+[S6] passed_test_ratio=1 → outputs/fizz/result.json
+[done] passed=true ratio=1
+```
+
+#### ② 対戦型（`eval_mode: "battle"`）— `examples/toy-janken`
+
+戦略プログラム同士を実プロセスで総当たり対戦させ、勝率（`win_rate`）で採点する。run ディレクトリの `players/{id}/` を 1手ごとに spawn する（同梱 example は `python player.py`、stdin に1行 JSON で局面、stdout に手）。**LLM CLI は不要**（既存プレイヤーを対戦させるだけ）。
+
+```bash
+cp -r examples/toy-janken outputs/janken   # PowerShell: Copy-Item -Recurse examples/toy-janken outputs/janken
+npm run taikai -- run --run-dir outputs/janken
+```
+
+```
+[S6 battle] 3 player 総当たり…
+[done] battle winner=beat-last win_rate=...
+  #1 beat-last: win_rate=...
+  #2 cycle: win_rate=...
+  #3 always-rock: win_rate=...
+```
+
+### 出力（run ディレクトリの中身）
+
+| パス | 内容 |
+|---|---|
+| `<run-dir>/result.json` | その周回の最終 `BenchResult`（score / strategy_id / eval_mode / metrics）。battle 型は1位プレイヤー |
+| `<run-dir>/partials/S*_PARTIAL_W*B*_*.json` | フェーズ間契約（戦略・コード試行・採点）。Resume はこの glob だけで再開 |
+| `<run-dir>/events/pipeline.jsonl` | 1イベント=1行 JSON（pipeline_started / phase_completed …）append-only |
+| `<run-dir>/logs/` | フェーズログ |
+| `<run-dir>/projects/{strategy}/` | （test型）生成コード `src/` と凍結された `tests/` と `manifest.json` |
+| `outputs/leaderboard.json` | **全 run 横断**の `LeaderboardEntry[]`（score 降順）。run をまたいで追記される |
+
+### Dashboard（dashboard-lite — 依存ゼロの read-only 観測）
+
+`node:http` だけの最小ダッシュボード。`outputs/` を読んで run 一覧・result・leaderboard を表示し、`events/pipeline.jsonl` を SSE で live tail する（**書き込み系は 405、観測専用**）。
+
+```bash
+npm run dashboard   # [dashboard-lite] read-only dashboard on http://localhost:8787
+```
+
+- `GET /` ダッシュボード HTML
+- `GET /api/runs` / `GET /api/runs/:id/result` / `GET /api/runs/:id/events`
+- `GET /api/runs/:id/stream` events の live tail（text/event-stream）
+- `GET /api/leaderboard`
+
+ポートは `PORT`、outputs パスは `OUTPUTS_DIR` で上書き可。
+
+### 主な環境変数
+
+| 変数 | 効果 |
+|---|---|
+| `TAIKAI_REFLECTOR=template` | S5 の D22 reflector を切り、素の失敗出力注入のみにする（LLM 呼び出し削減） |
+| `TAIKAI_BACKUP_DIR=<dir>` | run 完了時に成果物を複製 |
+| `{PROVIDER}_MODEL`（`CLAUDE_MODEL` 等） | runtime ごとのモデル指定。認証は CLI 側のサブスクログイン（API キーは持たない） |
+
+---
+
 ## Architecture
 
 ```mermaid
