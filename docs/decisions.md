@@ -40,15 +40,16 @@ Open は実装着手前に決め切る必要がある順に並べた。各項目
 
 ## 🔴 固めるべき決定点（Open）— 着手前に決める
 
-### D1. 並行作業モデル：branch か フォルダか ★最優先
-README で未決（「branch を切るか → project フォルダで管理か」）。**下流の全構造がここに依存**。
-- **推奨: フォルダ構造（戦略ごとに `projects/<strategy_id>/` を切る）＋ 任意で git worktree**
-- 理由: 戦略を大量並行生成・実装するため、branch 切替コストより**独立フォルダの方が並列に強い**。フォルダ構成は speca のように使い回しテンプレ化できる。git はスナップショット用途に留める。
+### D1. 並行作業モデル：branch か フォルダか ✅確定（[directory-structure.md](./directory-structure.md)）
+README で未決だった点。**フォルダ構造で確定**。
+- **確定: `projects/<strategy_id>/` の独立フォルダ＋必要時のみ git worktree。branch は使わない。**
+- 理由: 戦略を大量並行生成・実装するため、branch 切替コストより独立フォルダの方が並列に強い。speca と同様に雛形(`_skeleton/`)を使い回す。worktree 採用時は共有`.git` commit を直列化＋index.lock retry-backoff（D13）。
 
-### D2. フェーズ間 JSON 契約の厳密度と命名 ★最優先
-`PhaseArtifact<T>` エンベロープ（architecture.md）を**正式スキーマとして固定**するか。
-- **推奨: `schemas/` に JSON Schema を置き、CI/ランナーで検証必須にする（speca と同形式）**
-- 理由: 型契約が緩いと resume・統廃合・人間差し替えが破綻する。命名 `<phase>_PARTIAL_W{w}B{b}_{ts}.json` を規約として確定。
+### D2. フェーズ間 JSON 契約の厳密度と命名 ✅確定（[directory-structure.md](./directory-structure.md)）
+`PhaseArtifact<T>` エンベロープを**正式スキーマとして固定**する。
+- **確定: `schemas/` に speca 同型の3+1層（データ型 / `S{n}Partial` / `*Event` / `RunManifest`）を置き、ランナー/CI で検証必須。**
+- 命名規約確定: partial = `S{n}_PARTIAL_W{worker}B{batch}_{ISO8601}.json`、run dir = `{ISO8601}-{commit}-{大会slug}`。
+- 残: 各 `*.schema.json` の中身を実装（実装タスク）。
 
 ### D3. ベンチマーク評価器の定義 ★最優先（README 最大の「未定」）
 S6 が「未定・自動生成？」のまま。**スコア関数・閾値・遺伝子セッションの具体が無いと最適化ループが回らない**。
