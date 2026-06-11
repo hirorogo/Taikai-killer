@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "PhaseArtifact",
+  "title": "PhaseArtifact",
+  "description": "フェーズ間の共通エンベロープ。全 PARTIAL_*.json が従う。payload は型未確定なので任意。types.ts:PhaseArtifact<T> に一致。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "phase",
+    "worker",
+    "batch",
+    "timestamp",
+    "schema_version",
+    "status",
+    "provenance",
+    "payload"
+  ],
+  "properties": {
+    "id": { "type": "string" },
+    "phase": { "type": "string" },
+    "worker": { "type": "number" },
+    "batch": { "type": "number" },
+    "timestamp": { "type": "string" },
+    "schema_version": { "type": "string" },
+    "status": { "type": "string", "enum": ["ok", "partial", "error"] },
+    "provenance": { "$ref": "Provenance" },
+    "payload": {}
+  }
+}

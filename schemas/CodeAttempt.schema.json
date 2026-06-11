@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "CodeAttempt",
+  "title": "CodeAttempt",
+  "description": "D22 Reflexion ループの1 attempt。PhaseArtifact<CodeAttempt> payload。types.ts:CodeAttempt に一致。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["attempt", "code_ref", "passed_anchor_ids", "newly_passed_ids", "regressed"],
+  "properties": {
+    "attempt": { "type": "number" },
+    "code_ref": { "type": "string" },
+    "passed_anchor_ids": { "type": "array", "items": { "type": "string" } },
+    "newly_passed_ids": { "type": "array", "items": { "type": "string" } },
+    "regressed": { "type": "boolean" },
+    "reverted_to": { "type": "number" },
+    "distance": { "type": "number" }
+  }
+}

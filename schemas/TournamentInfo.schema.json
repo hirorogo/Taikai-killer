@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "TournamentInfo",
+  "title": "TournamentInfo",
+  "description": "TOURNAMENT_INFO.json — S1 の最小入力。types.ts:TournamentInfo に一致。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "language", "run_cmd", "test_cmd", "test_source", "submission"],
+  "properties": {
+    "name": { "type": "string" },
+    "language": { "type": "string", "enum": ["python", "node", "ts"] },
+    "run_cmd": { "type": "string" },
+    "test_cmd": { "type": "string" },
+    "test_source": { "type": "string", "enum": ["provided", "generate", "heldout"] },
+    "submission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format"],
+      "properties": {
+        "format": { "type": "string", "enum": ["zip", "repo_url", "web_url", "pdf"] },
+        "deadline": { "type": "string" }
+      }
+    },
+    "eligibility": { "type": "string" },
+    "automation_allowed": { "type": "boolean" },
+    "source_url": { "type": "string" }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "Strategy",
+  "title": "Strategy",
+  "description": "S3 戦略。types.ts:Strategy に一致。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "origin", "approach"],
+  "properties": {
+    "id": { "type": "string" },
+    "origin": {
+      "type": "string",
+      "enum": ["requirement", "result", "paper", "subject", "rival", "human_idea"]
+    },
+    "approach": { "type": "string" },
+    "merged_from": { "type": "array", "items": { "type": "string" } }
+  }
+}
