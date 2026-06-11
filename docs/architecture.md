@@ -166,6 +166,15 @@ interface ScoringRubric {                 // SCORING_RUBRIC.json ← S1 が大�
   forbidden: string[];                    // 禁止事項（報酬ハック対策）
   derived_from: string;                   // 由来した大会ルール（TOURNAMENT_INFO / 定義.json の id）
 }
+interface TournamentInfo {                // TOURNAMENT_INFO.json ← S1 の最小入力（手書き可）
+  name: string;
+  language: "python" | "node" | "ts";
+  run_cmd: string; test_cmd: string;      // 生成コードの実行/テストコマンド（S5実行環境＝縦串MVP欠落1）
+  test_source: "provided" | "generate" | "heldout"; // テスト供給源（欠落2）
+  submission: { format: "zip" | "repo_url" | "web_url" | "pdf"; deadline?: string }; // 提出（欠落7）
+  eligibility?: string; automation_allowed?: boolean; // R1-R3 ゲート
+  source_url?: string;                    // 任意。無ければ手入力で S1 成立（欠落4）
+}
 
 // S2 外部知見（source_ref に実ソースを必ず残す）
 interface SearchWord { word: string; lang: "ja" | "en"; from: "rule" | "url" | "paper"; } // 検索ワード.json
@@ -178,6 +187,17 @@ interface Strategy {
   approach: string;
   merged_from?: string[];   // 類似統合の履歴（統合元の戦略 id）
   // 「どの論文/知見/要件から出たか」は provenance.derived_from / source_ref に記録
+  // ★コールドスタート（欠落3）: 初回 run は origin ∈ {requirement,paper,subject} のみ。
+  //   result/rival/human_idea は対応データが空ならスキップ（任意入力）。
+}
+
+// run 横断の最強選抜（outputs/leaderboard.json／欠落8）
+interface LeaderboardEntry {
+  run_id: string; strategy_id: string;
+  rubric_ref: string;       // 同一 rubric_ref 同士でのみ比較（採点軸が変われば別グループ）
+  score: number; passed_test_ratio: number;
+  result_ref: string;       // outputs/{run}/result.json
+  ts: string;
 }
 
 // S5 コード生成（D22 Reflexion ループの1 attempt。PhaseArtifact<CodeAttempt> payload）
@@ -233,6 +253,11 @@ interface BenchResult {
 | `E_CRAWL` | クロール失敗 / 広告・不適切 | 当該URLを除外（`excluded`）、MCP不安定時は built-in(fetch)へフォールバック、ワード改善ループへ |
 | `E_CODE_TEST` | 生成コードがテスト不通過 | **D22 Reflexion ループ**で自己改善再生成（A-1 の具体化＝失敗 input/expected/actual を全文注入し構造化 `fixed_code` 受領→`tsc --noEmit` 検証）。**修正適用後は既通過 `passed_anchor_ids` を必ず再実行し、退行したら直前解に revert＝単調改善を強制**（流用: AlphaCodium）。1試行内は config 駆動の有限キャップで打ち切り **best-so-far を返す**（失敗でなく `recordSkip`。ただし無進捗=`newly_passed` 空の打ち切り連続は D5③ stall でカウント） |
 | `E_HOST` | ホスト汚染/破壊検知 | **通常マシン運用のため自動破棄はしない**。検知して通知＋停止、復旧は手動（IaC再作成は任意） |
+| `E_S1_INPUT` | S1 で `TOURNAMENT_INFO` 必須フィールド欠落 | S1（1回のみ）を **exit 1** で止めて通知。黙ってデフォルトで進めない。人間が手書きで埋める（欠落4） |
+| `E_TEST_TAMPER` | S6 採点前のテスト再ハッシュが S5 開始時と不一致 | テスト改変＝**失格扱い**でその戦略を drop（報酬ハック対策／欠落2） |
+| `E_SUBMIT_GATE` | 提出物アセンブル完了 | 自動提出せず**ヒューマンレビューゲート提示**（不可逆操作／R3／欠落7） |
+
+> **通知（欠落5・初回必須）**: 上記のうち exit 64/65/2・`E_S1_INPUT`・レビューゲート・run完了は `notify()` で **best-effort 配信**（env `TAIKAI_NOTIFY_WEBHOOK` へ POST、失敗しても throw せず `outputs/{run}/logs/notify.jsonl` に必ず追記）。通知が無いと「無限ループ」が「無限停止」になる。
 
 > 思想: **単一ワーカーの失敗でループを止めない**。失敗は JSON に記録して局所スキップし、
 > 全体の無限ループ（速度・自律性）を優先する。停止はレート枯渇・ヒューマンレビューゲート・暴走停止(CB)のみ（コスト上限は任意指定時）。

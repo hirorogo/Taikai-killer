@@ -18,7 +18,9 @@
 - **`E_RATELIMIT` は失敗にカウントしない。** 待機→復活→resume であって失敗ではない（`recordSkip` 扱い）。
 - **決定論的失敗はリトライしない。** `E_CODE_TEST` は同一プロンプト再試行を禁止し、**D22 Reflexion ループ**で再生成。自己改善プロンプトには**失敗テストの input/expected/actual を全文注入**し、構造化出力(JSON `fixed_code`)で受け、`tsc --noEmit`/esbuild parse で構文検証してから採用（不正なら1回フォールバック救済、なお不正なら status:error でスキップ）。修正 diff を log に残す（流用: AlphaCodium）。
 - **プロンプトは静的。** オーケストレータは穴埋め（`QUEUE_FILE`/`CONTEXT_FILE`/`OUTPUT_FILE`）のみ。変異させるのは data（戦略/閾値JSON）だけ、指示文は変異させない（再現性のため）。
-- **評価器・テストの改ざん禁止。** 「テストを消す/編集して勝つ」自己欺瞞は禁止（報酬ハッキング対策 / Issue #2）。
+- **評価器・テストの改ざん禁止。** 「テストを消す/編集して勝つ」自己欺瞞は禁止（報酬ハッキング対策 / Issue #2）。**テストを書くワーカーとコードを書くワーカーは必ず分離**し、テストは S5 開始時に sha256 凍結、S6 が採点前に再ハッシュ検証（不一致＝失格／E_TEST_TAMPER）。
+- **不可逆操作はレビューゲート必須。** 大会提出（submit）・外部送信・publish は自動実行せず、ヒューマンレビューゲートに出す（R3 / E_SUBMIT_GATE）。
+- **通知は best-effort。** exit 64/65/2・S1入力欠落・レビュー質問・run完了は `notify()` で webhook へ。失敗しても throw せず `logs/notify.jsonl` に必ず残す（無通知＝無限停止を防ぐ）。
 - **評価ルブリックは外部化。** 大会固有ルールはコードに埋めず `TOURNAMENT_INFO.json`/`SCORING_RUBRIC.json`/`定義.json`/`題材.json` から注入。
 
 ## データフロー命名規約（固定）

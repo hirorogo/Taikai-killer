@@ -159,6 +159,8 @@ outputs/                              # .gitignore（*.png/*.md だけ allowlist
     ├── submitted/     # 大会提出物（speca: submitted/）
     ├── run_manifest.json   # 不変メタ＝再現性マニフェスト（D17）
     └── result.json    # S6 レポート
+outputs/leaderboard.json   # ★run 横断の最強選抜（同一 rubric_ref で比較／欠落8）
+$TAIKAI_BACKUP_DIR/        # ★result確定ごとに result/manifest/partial を複製（欠落6。USB宛てはC:ステージ→robocopy /MT）
 
 .taikai/                   # ★可変状態（成果物と分離 / steal E-2）— .gitignore
 └── runs/{id}/
@@ -176,10 +178,12 @@ outputs/                              # .gitignore（*.png/*.md だけ allowlist
 
 ```
 projects/                       # 戦略ごとに独立フォルダ（branch でなくフォルダ＝D1）
-├── _skeleton/                  # 使い回す雛形（templates/ から生成。★中身=対象大会の言語/テスト方式は要具体化）
-└── {strategy_id}/              # 戦略1つ＝1ワークスペース（worktree 任意）
+├── _skeleton/                  # 対象言語のテンプレ（entrypoint/テスト配線。MVPは1言語ぶん／欠落1）
+└── {strategy_id}/              # 戦略1つ＝1ワークスペース（worktree 任意）。書込はこの中だけ（R4最小ガード）
     ├── strategy.json           # Strategy.schema.json 準拠
+    ├── manifest.json           # language/run_cmd/test_cmd/timeout_ms（実行環境／欠落1）
     ├── src/                    # 生成コード
+    ├── tests/                  # テスト（provided/generate/heldout）。S5開始時にsha256凍結（欠落2）
     └── bench/                  # この戦略のベンチ結果
 
 evolution/                      # 遺伝子セッション（D18）★初期スコープ外（run数が増えてから）
