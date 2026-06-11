@@ -35,16 +35,19 @@ flowchart TD
     ORCH --- RES & CB & COST & WD
   end
 
-  subgraph LOOP["無限ループ: 1 result = S1..S6"]
+  subgraph BOOT["ブートストラップ: 1回のみ"]
     S1[S1 要件定義<br/>大会ルール抽出]
-    S2[S2 外部知見<br/>クロール/論文]
+  end
+  subgraph LOOP["無限ループ: rate-limit 枯渇まで (S2..S6)"]
+    S2[S2 外部知見<br/>最大4回 / 収束で早期終了]
     S3[S3 戦略生成<br/>大量列挙]
     S4[S4 要件精緻化<br/>戦略ごと]
     S5[S5 コード生成<br/>テスト通すまで]
     S6[S6 ベンチマーク<br/>評価/閾値/遺伝子]
-    S1 --> S2 --> S3 --> S4 --> S5 --> S6
-    S6 -->|result.json を input に再投入| S2
+    S2 --> S3 --> S4 --> S5 --> S6
+    S6 -->|result.json を再投入| S2
   end
+  S1 --> S2
 
   subgraph AGENTS["マルチエージェント"]
     A1[claude]
@@ -59,7 +62,9 @@ flowchart TD
   STORE[(JSON Store / outputs<br/>schemas準拠)]
   HOST[使い捨てホスト<br/>サンドボックス無効]
 
+  ORCH -->|初回起動| BOOT
   ORCH -->|フェーズ起動| LOOP
+  BOOT <-->|dispatch| AGENTS
   LOOP <-->|ワーカー dispatch| AGENTS
   LOOP <-->|各フェーズで read/write| STORE
   S1 -.->|質問.json| HR
