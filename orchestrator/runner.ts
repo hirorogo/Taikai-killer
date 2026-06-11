@@ -221,19 +221,31 @@ ${spec}
 eval_mode=${rubric.eval_mode}, metrics=${rubric.metrics.map((m) => m.name).join(",")}
 
 Strategy[] の JSON だけを出力（id/origin/approach）。origin は "requirement" か "subject"。`;
-  const s3out = await runCLISubprocess("claude", {
-    prompt: s3Prompt,
-    timeoutMs: MVP_PHASES["S3"]!.timeoutMs,
-  });
-  if (s3out.emptyResult) {
-    console.error("[S3] 空出力（E_LLM_COMM）");
-    process.exit(1);
+  // resume（D9/AC5）: 既存 S3 partial があれば再生成せず再利用＝高価な LLM 呼び出しの二重実行回避。
+  let strategies: Strategy[] | null = loadExistingS3(runDir);
+  if (strategies) {
+    console.log(`[S3] resume: 既存 ${strategies.length} 戦略を再利用（再生成スキップ）`);
   }
-  let strategies: Strategy[];
-  try {
-    strategies = extractJson(s3out.text) as Strategy[];
-  } catch (e) {
-    console.error(`[S3] JSON 解析失敗: ${e instanceof Error ? e.message : e}`);
+  // 難問だとモデルが地の文を返すことがあるため、JSON が取れるまで厳格化して最大3回リトライ。
+  for (let tryN = 1; tryN <= 3 && !strategies; tryN++) {
+    const strict =
+      tryN === 1
+        ? ""
+        : "\n\n⚠ 前回 JSON 配列で出力されなかった。**出力は JSON 配列のみ**。先頭文字は `[`、末尾は `]`。地の文・前置き・解説を一切書くな。";
+    const out = await runCLISubprocess("claude", {
+      prompt: s3Prompt + strict,
+      timeoutMs: MVP_PHASES["S3"]!.timeoutMs,
+    });
+    if (out.emptyResult) continue;
+    try {
+      const parsed = extractJson(out.text);
+      if (Array.isArray(parsed) && parsed.length > 0) strategies = parsed as Strategy[];
+    } catch {
+      /* 次の試行で厳格化 */
+    }
+  }
+  if (!strategies) {
+    console.error("[S3] 戦略 JSON を3回試行しても取得できず（E_LLM_COMM）");
     process.exit(1);
   }
   strategies = strategies.filter((s) => s.origin === "requirement" || s.origin === "subject");
@@ -410,6 +422,23 @@ ${strategy.approach}
   if (bk.backedUp) console.log(`[backup] ${bk.copied.length} 件複製`);
   await notify(runDir, { type: "run_complete", passed, ratio, strategy: strategy.id });
   console.log(`[done] passed=${passed} ratio=${ratio}`);
+}
+
+/** resume: 既存 S3 partial（status!=="error"）から戦略を復元。無ければ null（D9/AC5）。 */
+function loadExistingS3(runDir: string): Strategy[] | null {
+  const dir = partialsDir(runDir);
+  if (!existsSync(dir)) return null;
+  const files = readdirSync(dir).filter((f) => f.startsWith("S3_PARTIAL_") && f.endsWith(".json"));
+  const out: Strategy[] = [];
+  for (const f of files) {
+    try {
+      const art = readJson<PhaseArtifact<Strategy>>(join(dir, f));
+      if (art.status !== "error" && art.payload?.id) out.push(art.payload);
+    } catch {
+      /* 壊れた partial はスキップ */
+    }
+  }
+  return out.length > 0 ? out : null;
 }
 
 // ───────── S6 対戦モード（戦略プログラム同士を実対戦）─────────
