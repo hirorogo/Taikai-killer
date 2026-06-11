@@ -25,6 +25,7 @@ import { validateArtifact } from "./validate.ts";
 import { backupResult } from "./backup.ts";
 import { runBattleEval } from "./s6battle.ts";
 import type { BattlePlayer } from "./battleRunner.ts";
+import { langProfile } from "./langSupport.ts";
 import {
   partialsDir,
   logsDir,
@@ -286,12 +287,16 @@ Strategy[] の JSON だけを出力（id/origin/approach）。origin は "requir
 
   const manifest: ProjectManifest = {
     language: ti.language,
-    entrypoint: ti.language === "python" ? "src/main.py" : "src/main.js",
+    entrypoint: langProfile(ti.language).entrypoint, // 言語非依存（python/node/ts）
     run_cmd: ti.run_cmd,
     test_cmd: ti.test_cmd,
     timeout_ms: 60_000,
   };
   writeJson(join(projDir, "manifest.json"), manifest);
+  // node(CJS): repo root の "type":"module" 下で require/module.exports を動かすため
+  if (ti.language === "node") {
+    writeFileSync(join(projDir, "package.json"), JSON.stringify({ type: "commonjs" }), "utf8");
+  }
 
   const maxAttempts = MVP_PHASES["S5"]!.maxAttempts ?? 3;
   const feedbackHistory: string[] = [];
