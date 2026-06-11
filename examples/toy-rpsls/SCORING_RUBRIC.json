@@ -1,0 +1,6 @@
+{
+  "eval_mode": "battle",
+  "metrics": [{ "name": "win_rate", "weight": 1.0, "direction": "max" }],
+  "forbidden": ["対戦相手プロセスの改変", "評価器(battleRunner)の改変"],
+  "derived_from": "toy-rpsls-rules"
+}

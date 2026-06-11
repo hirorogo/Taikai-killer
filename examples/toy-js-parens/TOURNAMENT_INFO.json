@@ -1,0 +1,9 @@
+{
+  "name": "toy-js-parens",
+  "language": "node",
+  "run_cmd": "node src/main.js",
+  "test_cmd": "node tests/test.js",
+  "test_source": "provided",
+  "submission": { "format": "zip" },
+  "automation_allowed": true
+}

@@ -63,6 +63,14 @@ async function main(): Promise<void> {
       await doctor(runDir);
       break;
     }
+    case "experiment": {
+      // 多戦略実験ループ: 複数戦略を実装・採点→いいとこ比較→閾値実験→round くるくる
+      const { runExperiment } = await import("./runner.ts");
+      const rounds = Number(getOpt("rounds") ?? 2);
+      const topK = Number(getOpt("topK") ?? 2);
+      await runExperiment(runDir, { rounds, topK });
+      break;
+    }
     case "status": {
       // run ディレクトリの要約（フェーズ進捗・結果・leaderboard 上位）
       const { summarizeRun } = await import("./runSummary.ts");
@@ -71,7 +79,7 @@ async function main(): Promise<void> {
       break;
     }
     default:
-      console.error("usage: taikai <probe|run|doctor|status|evolve> [--run-dir <path>] [--seed N] [--iterations N]");
+      console.error("usage: taikai <probe|run|doctor|status|evolve|experiment> [--run-dir <path>] [--rounds N] [--topK N] [--seed N] [--iterations N]");
       process.exit(2);
   }
 }

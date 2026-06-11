@@ -1,0 +1,9 @@
+{
+  "name": "toy-ts-temporal",
+  "language": "ts",
+  "run_cmd": "npx tsx src/main.ts",
+  "test_cmd": "npx tsx tests/test.ts",
+  "test_source": "provided",
+  "submission": { "format": "zip" },
+  "automation_allowed": true
+}

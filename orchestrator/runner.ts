@@ -25,6 +25,7 @@ import { validateArtifact } from "./validate.ts";
 import { backupResult } from "./backup.ts";
 import { runBattleEval } from "./s6battle.ts";
 import type { BattlePlayer } from "./battleRunner.ts";
+import { langProfile } from "./langSupport.ts";
 import {
   partialsDir,
   logsDir,
@@ -286,12 +287,16 @@ Strategy[] の JSON だけを出力（id/origin/approach）。origin は "requir
 
   const manifest: ProjectManifest = {
     language: ti.language,
-    entrypoint: ti.language === "python" ? "src/main.py" : "src/main.js",
+    entrypoint: langProfile(ti.language).entrypoint, // 言語非依存（python/node/ts）
     run_cmd: ti.run_cmd,
     test_cmd: ti.test_cmd,
     timeout_ms: 60_000,
   };
   writeJson(join(projDir, "manifest.json"), manifest);
+  // node(CJS): repo root の "type":"module" 下で require/module.exports を動かすため
+  if (ti.language === "node") {
+    writeFileSync(join(projDir, "package.json"), JSON.stringify({ type: "commonjs" }), "utf8");
+  }
 
   const maxAttempts = MVP_PHASES["S5"]!.maxAttempts ?? 3;
   const feedbackHistory: string[] = [];
@@ -437,6 +442,188 @@ ${strategy.approach}
   writeJson(join(runDir, "archive_manifest.json"), arch);
   await notify(runDir, { type: "run_complete", passed, ratio, strategy: strategy.id });
   console.log(`[done] passed=${passed} ratio=${ratio}`);
+}
+
+// ═════════ 多戦略 実験ループ（experiment）═════════
+// 複数戦略を実装・採点し、いいとこを比較、閾値（maxAttempts）を振って実験し、round でくるくる回す。
+
+interface StrategyOutcome {
+  strategyId: string;
+  passed: boolean;
+  ratio: number;
+  attempts: number;
+  maxAttempts: number;
+}
+
+/** 1戦略を test 型で実装(S5 D22)→採点(S6)。非致命（失敗しても throw/exit しない）。batch で partial 衝突回避。 */
+async function implementStrategyTest(
+  runDir: string,
+  strategy: Strategy,
+  ti: TournamentInfo,
+  spec: string,
+  maxAttempts: number,
+  batch: number,
+): Promise<StrategyOutcome> {
+  const cb = new CircuitBreaker();
+  const projDir = join(runDir, "projects", strategy.id);
+  mkdirSync(join(projDir, "src"), { recursive: true });
+  const runTests = join(runDir, "tests");
+  if (!existsSync(runTests)) return { strategyId: strategy.id, passed: false, ratio: 0, attempts: 0, maxAttempts };
+  const projTests = join(projDir, "tests");
+  cpSync(runTests, projTests, { recursive: true });
+  const testFrozen = hashDir(projTests);
+
+  const manifest: ProjectManifest = {
+    language: ti.language,
+    entrypoint: langProfile(ti.language).entrypoint,
+    run_cmd: ti.run_cmd,
+    test_cmd: ti.test_cmd,
+    timeout_ms: 60_000,
+  };
+  writeJson(join(projDir, "manifest.json"), manifest);
+  if (ti.language === "node") {
+    writeFileSync(join(projDir, "package.json"), JSON.stringify({ type: "commonjs" }), "utf8");
+  }
+
+  let passed = false;
+  let attempts = 0;
+  let lastTestOutput = "";
+  let lastReflection = "";
+  for (let attempt = 1; !passed && attempt <= maxAttempts; attempt++) {
+    attempts = attempt;
+    const fb = attempt > 1
+      ? `\n## 前回の失敗（対処せよ・テスト改変禁止）\n${lastReflection ? `改善指示: ${lastReflection}\n` : ""}テスト出力:\n${lastTestOutput.slice(0, 1500)}`
+      : "";
+    const s5Prompt = `${readFileSync(MVP_PHASES["S5"]!.promptPath, "utf8")}\n\n## 課題仕様\n${spec}\n\n## 戦略\n${strategy.approach}\n\n## 言語: ${ti.language}（${manifest.entrypoint} に書く）\n出力は {"fixed_code": "<コード全文>"} の JSON だけ。${fb}`;
+    const out = await runCLISubprocess("claude", { prompt: s5Prompt, timeoutMs: MVP_PHASES["S5"]!.timeoutMs });
+    let code = "";
+    try {
+      code = (extractJson(out.text) as { fixed_code?: string }).fixed_code ?? "";
+    } catch {
+      code = "";
+    }
+    if (!code.trim()) {
+      cb.recordEmpty();
+      lastTestOutput = "empty fixed_code";
+      if (cb.tripped()) break;
+      continue;
+    }
+    writeFileSync(join(projDir, manifest.entrypoint), code, "utf8");
+    const test = await runCmd(manifest.test_cmd, projDir, manifest.timeout_ms);
+    lastTestOutput = (test.stdout + "\n" + test.stderr).trim();
+    const ok = test.code === 0 && !test.timedOut;
+    cb.recordResult(ok);
+    writePartial<CodeAttempt>(runDir, "S5", batch, attempt,
+      { attempt, code_ref: manifest.entrypoint, passed_anchor_ids: ok ? ["all"] : [], newly_passed_ids: ok ? ["all"] : [], regressed: false },
+      prov("S5", [strategy.id]));
+    if (ok) { passed = true; break; }
+    if (cb.tripped()) break;
+    if (attempt < maxAttempts && process.env["TAIKAI_REFLECTOR"] !== "template") {
+      lastReflection = await reflect(spec, code, lastTestOutput);
+    }
+  }
+  // S6: 改変検知 → 採点
+  let ratio = 0;
+  if (hashDir(projTests) === testFrozen) {
+    const finalTest = await runCmd(manifest.test_cmd, projDir, manifest.timeout_ms);
+    ratio = parsePytestRatio(finalTest.stdout + finalTest.stderr, finalTest.code);
+  } else {
+    console.warn(`[experiment] ${strategy.id}: E_TEST_TAMPER → 0点`);
+  }
+  return { strategyId: strategy.id, passed, ratio, attempts, maxAttempts };
+}
+
+/** S3: 戦略を生成（厳格化リトライ＋dedup＋cold-start filter）。実験/単発で共用可。 */
+async function generateStrategies(spec: string, rubric: ScoringRubric): Promise<Strategy[]> {
+  const base = `${readFileSync(MVP_PHASES["S3"]!.promptPath, "utf8")}\n\n## 課題仕様\n${spec}\n\n## 評価\neval_mode=${rubric.eval_mode}, metrics=${rubric.metrics.map((m) => m.name).join(",")}\n\nStrategy[] の JSON だけを出力（id/origin/approach）。origin は "requirement" か "subject"。多様なアプローチを3〜5個。`;
+  let strategies: Strategy[] | null = null;
+  for (let tryN = 1; tryN <= 3 && !strategies; tryN++) {
+    const strict = tryN === 1 ? "" : "\n\n⚠ 出力は JSON 配列のみ。先頭 `[` 末尾 `]`。地の文禁止。";
+    const out = await runCLISubprocess("claude", { prompt: base + strict, timeoutMs: MVP_PHASES["S3"]!.timeoutMs });
+    if (out.emptyResult) continue;
+    try {
+      const parsed = extractJson(out.text);
+      if (Array.isArray(parsed) && parsed.length > 0) strategies = parsed as Strategy[];
+    } catch {
+      /* retry */
+    }
+  }
+  if (!strategies) return [];
+  return dedupStrategies(strategies.filter((s) => s.origin === "requirement" || s.origin === "subject"));
+}
+
+/** 多戦略実験ループ（test型）。複数戦略を実装・採点し、いいとこ比較・閾値実験・round くるくる。 */
+export async function runExperiment(
+  runDir: string,
+  opts: { rounds?: number; topK?: number } = {},
+): Promise<void> {
+  ensureDirs(runDir);
+  await doctor(runDir);
+  const ti = readJson<TournamentInfo>(tournamentInfoPath(runDir));
+  const rubric = readJson<ScoringRubric>(scoringRubricPath(runDir));
+  if (rubric.eval_mode !== "test") {
+    console.error("[experiment] 現状 test 型のみ対応（battle 型は run を使う）");
+    process.exit(2);
+  }
+  const spec = existsSync(join(runDir, "spec.md")) ? readFileSync(join(runDir, "spec.md"), "utf8") : ti.name;
+  const runId = relative("outputs", runDir) || "run";
+  const rounds = Math.max(1, opts.rounds ?? 2);
+  const topK = Math.max(1, opts.topK ?? 2);
+  pipelineStarted(runDir, runId);
+
+  const pool: Strategy[] = [];
+  const outcomes: StrategyOutcome[] = [];
+  let best: StrategyOutcome | null = null;
+  const maxAttempts = MVP_PHASES["S5"]!.maxAttempts ?? 3;
+  let batch = 0;
+
+  for (let round = 1; round <= rounds; round++) {
+    console.log(`\n=== round ${round}/${rounds} ===`);
+    // round ごとに id を一意化（claude は毎回同じ id を返すため。approach は dedup 済み）
+    const fresh = (await generateStrategies(spec, rubric)).map((s) => ({
+      ...s,
+      id: `r${round}-${s.id}`,
+    }));
+    pool.push(...fresh);
+    const targets = fresh.slice(0, topK);
+    console.log(`[round ${round}] 新規戦略 ${fresh.length} → 実装 ${targets.length}`);
+    for (const strat of targets) {
+      const oc = await implementStrategyTest(runDir, strat, ti, spec, maxAttempts, batch++);
+      outcomes.push(oc);
+      appendLeaderboard({
+        run_id: runId, strategy_id: oc.strategyId, rubric_ref: rubric.derived_from,
+        score: oc.ratio, passed_test_ratio: oc.ratio, result_ref: resultPath(runDir), ts: isoNow(),
+      });
+      console.log(`  ${oc.strategyId}: ratio=${oc.ratio.toFixed(3)} (attempts=${oc.attempts})`);
+      if (!best || oc.ratio > best.ratio) best = oc;
+    }
+  }
+
+  // 閾値変化実験: 勝者戦略を maxAttempts=1 で再実装し、少回数で足りるか比較（開発/閾値実験）
+  let thresholdFinding = "（実験なし）";
+  if (best) {
+    const winner = pool.find((s) => s.id === best!.strategyId);
+    if (winner) {
+      console.log(`\n[閾値実験] 勝者 ${winner.id} を maxAttempts=1 で再評価…`);
+      const t1 = await implementStrategyTest(runDir, { ...winner, id: `${winner.id}__k1` }, ti, spec, 1, batch++);
+      thresholdFinding = t1.ratio >= best.ratio
+        ? `maxAttempts=1 でも ratio=${t1.ratio.toFixed(3)}（${best.maxAttempts}回と同等）→ 1回で十分`
+        : `maxAttempts=1 は ratio=${t1.ratio.toFixed(3)} < ${best.ratio.toFixed(3)} → 複数回が有効`;
+      console.log(`[閾値実験] ${thresholdFinding}`);
+    }
+  }
+
+  // いいとこ取り（次round 種）＝勝者 approach を要約して記録
+  const summary = {
+    run_id: runId, rounds, topK,
+    strategies_tried: outcomes.length,
+    best: best ? { strategy_id: best.strategyId, ratio: best.ratio, attempts: best.attempts } : null,
+    threshold_experiment: thresholdFinding,
+    outcomes,
+  };
+  writeJson(join(runDir, "experiment_summary.json"), summary);
+  await notify(runDir, { type: "experiment_complete", best: best?.strategyId, ratio: best?.ratio });
+  console.log(`\n[experiment] 勝者=${best?.strategyId ?? "?"} ratio=${best?.ratio.toFixed(3) ?? "?"} / 試行 ${outcomes.length} 戦略 → experiment_summary.json`);
 }
 
 /** resume: 通過済み S5 attempt（newly_passed_ids 非空）が partial にあるか（D9/AC5）。 */
