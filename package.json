@@ -15,6 +15,7 @@
     "run": "tsx orchestrator/index.ts run",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "dashboard": "tsx dashboard-lite/server.ts",
     "schemas:validate": "tsx orchestrator/schemas.ts --selfcheck"
   },
   "dependencies": {
