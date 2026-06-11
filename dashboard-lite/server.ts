@@ -7,6 +7,7 @@
  *   GET /api/runs                  → RunSummary[]
  *   GET /api/runs/:id/result       → BenchResult | null
  *   GET /api/runs/:id/events       → PipelineEvent[]
+ *   GET /api/runs/:id/stream       → text/event-stream（events/pipeline.jsonl を tail して live push）
  *   GET /api/leaderboard           → LeaderboardEntry[]
  *
  * 方針:
@@ -20,9 +21,16 @@ import type { IncomingMessage, ServerResponse, Server } from "node:http";
 import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, basename } from "node:path";
-import { listRuns, readResult, readEvents, readLeaderboard } from "./readers.ts";
+import { listRuns, readResult, readEvents, readLeaderboard, readEventsSince } from "./readers.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+
+/** SSE tail のポーリング間隔（既定 1s）。STREAM_POLL_MS で上書き可。 */
+function streamPollMs(): number {
+  const v = process.env["STREAM_POLL_MS"];
+  const n = v !== undefined && v.length > 0 ? Number(v) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : 1000;
+}
 /** outputs/ はリポジトリ直下（dashboard-lite/ の隣の親）。OUTPUTS_DIR で上書き可。 */
 export function defaultOutputsDir(): string {
   return process.env["OUTPUTS_DIR"] ?? join(HERE, "..", "outputs");
@@ -64,6 +72,52 @@ function safeRunId(id: string): string | null {
 }
 
 /**
+ * events/pipeline.jsonl を tail して SSE (text/event-stream) で live push する。
+ * - readEventsSince(runDir, offset) でバイトオフセット以降の新イベントだけを拾い、`data:` 行で送る。
+ * - ポーリング間隔は streamPollMs()（既定 1s / STREAM_POLL_MS で上書き）。
+ * - クライアント切断（req close）で interval を必ず止める（リーク防止）。read-only なので副作用は読み取りのみ。
+ * - 観測用なので tail の read 失敗で接続を落とさない（次 tick で再試行）。
+ */
+function sendStream(req: IncomingMessage, res: ServerResponse, runDir: string): void {
+  res.writeHead(200, {
+    "content-type": "text/event-stream; charset=utf-8",
+    "cache-control": "no-store",
+    connection: "keep-alive",
+  });
+  // 初回コメントで接続を確立（プロキシのバッファ対策にもなる）。
+  res.write(": connected\n\n");
+
+  let offset = 0;
+  let closed = false;
+
+  const tick = (): void => {
+    if (closed) return;
+    try {
+      const since = readEventsSince(runDir, offset);
+      offset = since.offset;
+      for (const ev of since.events) {
+        res.write(`data: ${JSON.stringify(ev)}\n\n`);
+      }
+    } catch {
+      // best-effort: 1 tick の失敗で接続は落とさない（次回再試行）。
+    }
+  };
+
+  // 接続直後に既存分（offset=0 以降）を一括 push してから定期 tail に入る。
+  tick();
+  const timer = setInterval(tick, streamPollMs());
+  if (typeof timer.unref === "function") timer.unref(); // テスト/終了時にプロセスを引き止めない
+
+  const stop = (): void => {
+    if (closed) return;
+    closed = true;
+    clearInterval(timer);
+  };
+  req.on("close", stop);
+  res.on("close", stop);
+}
+
+/**
  * 1 リクエストを処理する純粋なルータ（テスト容易性のため createServer から分離）。
  * outputsDir を引数で受け取り、副作用は readers.ts の read-only 読み取りのみ。
  */
@@ -93,6 +147,28 @@ export function handleRequest(
 
   if (path === "/api/leaderboard") {
     sendJson(res, 200, readLeaderboard(outputsDir));
+    return;
+  }
+
+  // /api/runs/:id/stream  → SSE tail（live 更新）
+  const sm = /^\/api\/runs\/([^/]+)\/stream$/.exec(path);
+  if (sm) {
+    const id = safeRunId(sm[1] ?? "");
+    if (id === null) {
+      sendJson(res, 400, { error: "invalid run id" });
+      return;
+    }
+    const runDir = join(outputsDir, id);
+    if (!existsSync(runDir)) {
+      sendJson(res, 404, { error: "run not found", id });
+      return;
+    }
+    if (method === "HEAD") {
+      res.writeHead(200, { "content-type": "text/event-stream; charset=utf-8" });
+      res.end();
+      return;
+    }
+    sendStream(req, res, runDir);
     return;
   }
 

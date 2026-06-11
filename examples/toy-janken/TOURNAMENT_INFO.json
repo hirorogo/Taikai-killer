@@ -1,0 +1,9 @@
+{
+  "name": "toy-janken",
+  "language": "python",
+  "run_cmd": "python player.py",
+  "test_cmd": "python -c \"print('battle mode has no unit test_cmd')\"",
+  "test_source": "heldout",
+  "submission": { "format": "zip" },
+  "automation_allowed": true
+}

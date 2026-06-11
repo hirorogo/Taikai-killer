@@ -134,7 +134,59 @@
         }
       }
 
+      // 開いている detail の SSE 購読。run を切り替えたら前の購読を閉じる。
+      let activeStream = null;
+
+      function closeStream() {
+        if (activeStream) {
+          activeStream.close();
+          activeStream = null;
+        }
+      }
+
+      // フォールバック: EventSource 不可 or stream エラー時は従来 fetch で1回取得。
+      async function loadEventsFallback(id, eEl) {
+        try {
+          const events = await getJson(
+            "/api/runs/" + encodeURIComponent(id) + "/events",
+          );
+          eEl.textContent = events.length
+            ? events.map((e) => JSON.stringify(e)).join("\n")
+            : "(no events)";
+        } catch (err) {
+          eEl.textContent = err.message;
+        }
+      }
+
+      // SSE で live 購読。最初のイベントで "loading…" を消し、以後 append。
+      function subscribeEvents(id, eEl) {
+        if (typeof EventSource === "undefined") {
+          loadEventsFallback(id, eEl);
+          return;
+        }
+        const lines = [];
+        let started = false;
+        const url = "/api/runs/" + encodeURIComponent(id) + "/stream";
+        const es = new EventSource(url);
+        activeStream = es;
+        es.onmessage = (msg) => {
+          if (!started) {
+            started = true;
+            eEl.textContent = "";
+          }
+          lines.push(msg.data);
+          eEl.textContent = lines.join("\n");
+        };
+        es.onerror = () => {
+          // 接続失敗（stream 非対応サーバ等）。購読を閉じて fetch にフォールバック。
+          es.close();
+          if (activeStream === es) activeStream = null;
+          if (!started) loadEventsFallback(id, eEl);
+        };
+      }
+
       async function showDetail(id) {
+        closeStream();
         $("detail-section").hidden = false;
         $("detail-title").textContent = "Run detail — " + id;
         const rEl = $("detail-result");
@@ -149,16 +201,7 @@
         } catch (err) {
           rEl.textContent = err.message;
         }
-        try {
-          const events = await getJson(
-            "/api/runs/" + encodeURIComponent(id) + "/events",
-          );
-          eEl.textContent = events.length
-            ? events.map((e) => JSON.stringify(e)).join("\n")
-            : "(no events)";
-        } catch (err) {
-          eEl.textContent = err.message;
-        }
+        subscribeEvents(id, eEl);
         $("detail-section").scrollIntoView({ behavior: "smooth" });
       }
 
