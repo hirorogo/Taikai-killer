@@ -1,7 +1,12 @@
 # CLAUDE.md — Taikai-killer エージェント共通指示
 
-このリポジトリで作業する全エージェント（claude/gemini/codex/ollama/copilot）が従う規約。
+このリポジトリで作業する全エージェント（**claude / gemini**）が従う規約。
 設計の正は [`docs/`](./docs/README.md)。speca `CLAUDE.md` の書き方を流用（[steal-from-speca.md](./docs/steal-from-speca.md) F）。
+
+## スタック（2026-06-11 確定）
+- **TypeScript/Node** に統一（orchestrator も dashboard server も TS）。**Scrapling クロールのみ Python サイドカー**（`crawl-py/`）。
+- モデルは **Claude + Gemini、両方サブスクリプション**。**claude CLI / gemini CLI を subprocess で駆動**（従量課金なし）。フェーズ×モデルは config で手動指定。
+- 実行は[通常マシン・サンドボックス無効（隔離なし）](./docs/execution-premise.md)。使い捨てホストは使わない。
 
 ## Key Design Decisions（断定形・最上位）
 - **単一ワーカーの失敗でループを止めない。** 失敗は partial に記録して局所スキップ。停止は**レート枯渇・ヒューマンレビューゲート・暴走停止(CB)のみ**。
@@ -23,9 +28,9 @@
 - 状態3系統: `outputs/{run}/`（成果物・不変）/ `.taikai/runs/{id}/state.json`（可変・owner_pid）/ `~/.taikai/runtime.json`（永続）
 
 ## 環境変数
-- `TAIKAI_RUN_ID` — 決定論的 run-id（破壊→再作成→resume の stitching に必須）
+- `TAIKAI_RUN_ID` — 決定論的 run-id（resume の stitching に必須）
 - `FORCE_EXECUTE=1` — resume をバイパスして強制実行
-- `{PROVIDER}_API_KEY` / `{PROVIDER}_MODEL` / `{PROVIDER}_BASE_URL` — runtime ごと（API キーは設定ファイルに書かず env のみ）
+- `{PROVIDER}_MODEL` — runtime ごとのモデル指定（claude/gemini）。認証は CLI 側のサブスクログインを利用（API キーは持たない）
 
 ## Required — no hardcoded defaults
 - `TOURNAMENT_INFO.json` / `SCORING_RUBRIC.json` / `定義.json` / `題材.json` が欠落したら当該フェーズを**止める**（黙ってデフォルトで進めない＝exit 1）。

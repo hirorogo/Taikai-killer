@@ -16,10 +16,10 @@ Taikai-killer の**狙い・設計・確定事項はすべてこの `docs/` に�
 - **#1** 先行研究・類似OSS（speca / presentation-agent / FunSearch ほか）
 - **#2** 追加で固めるべき要件 D9–D21（他事例のベストプラクティス）
 
-## 現在の確定状況（サマリ）
-- ✅ ループ方針（L9）: S1=1回 / S2=最大4回・収束で早期終了 / S3–S6=レート枯渇まで
-- ✅ D1 並行モデル: `projects/<strategy_id>/` フォルダ（branch不使用）
-- ✅ D2 フェーズ契約: `schemas/` 3+1層（speca同型）＋命名規約
-- ✅ D5 コスト制御: **デフォルト無制限**、`budget_usd` 指定時のみ強制終了。暴走は CB で停止
-- 🔴 次に固める: D3 評価器 / D18 進化ハイパラ / D10 冪等キー / D9 状態モデル（#2参照）
-- 🔧 実装着手可: `orchestrator/` 骨組み（speca fork）＋ `schemas/*.json` 起こし
+## 現在の確定状況（サマリ）— 2026-06-11 ヒアリングで大量確定
+- ✅ **スタック**: TypeScript/Node 統一（Scrapling のみ Python サイドカー）。モデル= Claude+Gemini サブスク、CLI subprocess 駆動
+- ✅ **実行前提**: 通常マシン・サンドボックス無効（隔離なし・使い捨てホスト撤回）
+- ✅ ループ方針（L9）: S1=1回 / S2=最大4回・新規率<10%で早期終了 / S3–S6=レート枯渇まで
+- ✅ D1 フォルダ / D2 契約 / D3 ルブリックはS1由来 / D4 CLI手動割当 / D5 無制限 / D6 非同期承認 / D7 Scrapling sidecar / D8 通常マシン / D9 イベントログ+replay / D10 冪等キー / D11 CB(5/20/3) / D17 学会フル
+- ✅ D18 進化: まず単一プール、変異=戦略データ＋閾値のみ（prompt 静的）
+- 🔧 残＝実装タスク: `orchestrator/`(TS)移植 ＋ `schemas/*.json` 実体化 ＋ dashboard server の TS 書換 ＋ 評価器中身

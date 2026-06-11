@@ -19,7 +19,7 @@ Taikai-killer のフォルダ構成を、nyx foundation の実プロジェクト
 4. **run 単位の outputs ディレクトリ** — `outputs/{ISO8601}-{commit}-{tournament}/` に成果物・ログ・提出物を隔離（D9/D15/D17）
 5. **評価ルブリックの外部化（大会非依存）** — 大会固有の評価軸・配点・ルールはコードに埋めず `TOURNAMENT_INFO.json`/`SCORING_RUBRIC.json`/`定義.json`/`題材.json` から注入。ハーネス本体を別大会に転用可能に保つ（speca `BUG_BOUNTY_SCOPE.json` 流用 / [steal-from-speca.md](./steal-from-speca.md) E-1）
 
-スタック: **Python + uv**（speca と同じ `pyproject.toml`/`uv.lock`）をコアに、CLI/Dashboard は Node、発表は Slidev（presentation-agent を vendor）。
+スタック（**2026-06-11 確定**）: **TypeScript/Node** に統一（speca の Python orchestrator を TS に書き換え）。dashboard server も TS/Node。**Scrapling クロールのみ Python サイドカー**。モデルは **Claude + Gemini（サブスク）を CLI subprocess で駆動**。発表は presentation-agent（後で vendor）。
 
 ---
 
@@ -28,21 +28,22 @@ Taikai-killer のフォルダ構成を、nyx foundation の実プロジェクト
 ```
 Taikai-killer/
 ├── README.md
-├── CLAUDE.md                 # エージェント共通指示（speca 準拠）
-├── pyproject.toml / uv.lock  # Python コア依存
-├── Makefile                  # フェーズ実行のエントリ（presentation-agent 準拠）
-├── .github/                  # CI（schema 検証・lint）
+├── CLAUDE.md                 # エージェント共通指示
+├── package.json / tsconfig   # TS コア依存（pnpm/npm）
+├── Makefile                  # フェーズ実行のエントリ
+├── .github/                  # CI（schema 検証・lint・tsc）
 │
-├── orchestrator/             # ★中核ハーネス（speca scripts/orchestrator/ を流用）
+├── orchestrator/             # ★中核ハーネス（TS。speca scripts/orchestrator/ を移植）
 ├── prompts/                  # フェーズ別ワーカープロンプト（版管理＝D20）
 ├── schemas/                  # フェーズ間 JSON 契約（D2/D9）
 ├── templates/                # template.md（文体統一）＋ projects 雛形（D1/D20）
 ├── projects/                 # 戦略ごとの実装ワークスペース（D1：フォルダ並行）
-├── evolution/               # 遺伝子セッション＝island model（D18）
+├── evolution/                # 遺伝子セッション（まず単一プール→island化／D18）
 ├── benchmarks/               # S6 評価ランナー・eval 定義（D17）
 ├── knowledge/                # S2 外部知見の収集物（クロール/論文）
-├── dashboard/                # ★speca web/ を vendor（FastAPI + React/Vite）。run監視/結果/承認＝D6
-├── presentation/             # 発表生成（presentation-agent を vendor）
+├── crawl-py/                 # ★Scrapling クロールの Python サイドカー（TSから subprocess）
+├── dashboard/                # speca web/ を vendor。server は TS に書換中、frontend=React/Vite。D6
+├── presentation/             # 発表生成（presentation-agent は後で vendor）
 ├── outputs/                  # run 単位の成果物（.gitignore）
 ├── docs/                     # 設計ドキュメント（本ファイル群）
 └── tests/                    # スキーマ/オーケストレータのテスト
@@ -50,9 +51,10 @@ Taikai-killer/
 
 ---
 
-## orchestrator/（speca 実構成を流用）
+## orchestrator/（speca 実構成を TS 移植）
 
-speca `scripts/orchestrator/` の実ファイルを Taikai-killer 用に対応づける。
+speca `scripts/orchestrator/`（Python）の実ファイルを **TS に移植**して対応づける（下記は `.py`→`.ts`）。
+runtime は **claude / gemini の CLI を subprocess で駆動**（サブスク認証をそのまま利用、従量課金なし）。
 
 ```
 orchestrator/

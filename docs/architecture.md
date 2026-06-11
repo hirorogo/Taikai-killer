@@ -49,12 +49,9 @@ flowchart TD
   end
   S1 --> S2
 
-  subgraph AGENTS["マルチエージェント"]
-    A1[claude]
-    A2[gemini]
-    A3[codex]
-    A4[ollama]
-    A5[copilot]
+  subgraph AGENTS["マルチエージェント（CLI subprocess）"]
+    A1[claude CLI]
+    A2[gemini CLI]
   end
 
   HR[Human Review Gate<br/>必須1回 / STOP可]
