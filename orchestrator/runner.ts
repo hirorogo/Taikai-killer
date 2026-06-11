@@ -16,6 +16,9 @@ import {
 import { join, relative } from "node:path";
 import { runCLISubprocess } from "./runtimeRegistry.ts";
 import { MVP_PHASES } from "./config.ts";
+import { notify } from "./notify.ts";
+import { pipelineStarted, phaseCompleted } from "./events.ts";
+import { CircuitBreaker } from "./circuitBreaker.ts";
 import {
   partialsDir,
   logsDir,
@@ -117,27 +120,6 @@ function prov(phase: string, derivedFrom: string[], sourceRef?: string): Provena
   return p;
 }
 
-/** 失敗しても throw しない通知（best-effort / 欠落5）。 */
-async function notify(runDir: string, event: Record<string, unknown>): Promise<void> {
-  const line = JSON.stringify({ ...event, ts: isoNow() });
-  try {
-    appendFileSync(join(logsDir(runDir), "notify.jsonl"), line + "\n", "utf8");
-  } catch {
-    /* ignore */
-  }
-  const hook = process.env["TAIKAI_NOTIFY_WEBHOOK"];
-  if (!hook) return;
-  try {
-    await fetch(hook, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text: `[taikai] ${line}` }),
-    });
-  } catch {
-    /* best-effort: 配信失敗でも本体を止めない */
-  }
-}
-
 /** モデル出力から最初の JSON ブロックを抽出（```json フェンス対応）。 */
 function extractJson(text: string): unknown {
   const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -191,6 +173,7 @@ export async function runSlice(runDir: string): Promise<void> {
   const specPath = join(runDir, "spec.md");
   const spec = existsSync(specPath) ? readFileSync(specPath, "utf8") : ti.name;
   const runId = relative("outputs", runDir) || "run";
+  pipelineStarted(runDir, runId);
 
   // ── S3 戦略生成（cold-start: requirement/subject のみ）──
   console.log("[S3] 戦略生成…");
@@ -229,9 +212,11 @@ Strategy[] の JSON だけを出力（id/origin/approach）。origin は "requir
   const strategy = strategies[0]!;
   if (!strategy.id) strategy.id = "strat0";
   console.log(`[S3] ${strategies.length}個。先頭=${strategy.id}: ${strategy.approach.slice(0, 60)}`);
+  phaseCompleted(runDir, "S3", "ok");
 
   // ── S5 コード生成（D22 Reflexion ループ）──
   console.log("[S5] D22 ループ…");
+  const cb = new CircuitBreaker();
   const projDir = join(runDir, "projects", strategy.id);
   mkdirSync(join(projDir, "src"), { recursive: true });
   // provided テストを run dir から projects へコピー＋sha256 凍結（欠落2）
@@ -285,6 +270,7 @@ ${strategy.approach}
       code = "";
     }
     if (!code.trim()) {
+      cb.recordEmpty();
       feedbackHistory.push(`attempt ${attempt}: 空/不正な生成`);
       lastTestOutput = "model returned empty fixed_code";
       writePartial<CodeAttempt>(
@@ -320,12 +306,18 @@ ${strategy.approach}
       },
       prov("S5", [strategy.id]),
     );
+    cb.recordResult(ok);
     console.log(`[S5]   attempt ${attempt}: ${ok ? "PASS" : "FAIL"}`);
     if (ok) {
       passed = true;
       break;
     }
+    if (cb.tripped()) {
+      console.error(`[S5] Circuit Breaker tripped (${cb.reason()}) → 打ち切り`);
+      break;
+    }
   }
+  phaseCompleted(runDir, "S5", passed ? "ok" : "partial");
 
   // ── S6 ベンチマーク（test型 / 改変検知）──
   console.log("[S6] 採点…");
@@ -350,6 +342,7 @@ ${strategy.approach}
     threshold: [],
   };
   writeJson(resultPath(runDir), result);
+  phaseCompleted(runDir, "S6", "ok");
   console.log(`[S6] passed_test_ratio=${ratio} → ${resultPath(runDir)}`);
 
   // ── leaderboard（欠落8）＋ 通知（欠落5）──

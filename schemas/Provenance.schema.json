@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "Provenance",
+  "title": "Provenance",
+  "description": "来歴。全レコードが持つ。result から大会ルールまで遡れる（D17）。types.ts:Provenance に一致。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["produced_by", "derived_from", "timestamp"],
+  "properties": {
+    "produced_by": { "type": "string" },
+    "agent": { "type": "string", "enum": ["claude", "gemini"] },
+    "prompt_version": { "type": "string" },
+    "derived_from": { "type": "array", "items": { "type": "string" } },
+    "source_ref": { "type": "string" },
+    "timestamp": { "type": "string" }
+  }
+}

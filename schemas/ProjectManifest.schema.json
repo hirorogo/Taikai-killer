@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "ProjectManifest",
+  "title": "ProjectManifest",
+  "description": "projects/{id}/manifest.json。types.ts:ProjectManifest に一致。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["language", "entrypoint", "run_cmd", "test_cmd", "timeout_ms"],
+  "properties": {
+    "language": { "type": "string", "enum": ["python", "node", "ts"] },
+    "entrypoint": { "type": "string" },
+    "run_cmd": { "type": "string" },
+    "test_cmd": { "type": "string" },
+    "timeout_ms": { "type": "number" }
+  }
+}

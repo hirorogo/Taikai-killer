@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "ScoringRubric",
+  "title": "ScoringRubric",
+  "description": "SCORING_RUBRIC.json — S1 が大会ルールから導出する評価指標。types.ts:ScoringRubric に一致。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["eval_mode", "metrics", "forbidden", "derived_from"],
+  "properties": {
+    "eval_mode": { "type": "string", "enum": ["test", "battle"] },
+    "metrics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "weight", "direction"],
+        "properties": {
+          "name": { "type": "string" },
+          "weight": { "type": "number" },
+          "direction": { "type": "string", "enum": ["max", "min"] }
+        }
+      }
+    },
+    "forbidden": { "type": "array", "items": { "type": "string" } },
+    "derived_from": { "type": "string" }
+  }
+}
