@@ -9,57 +9,106 @@
         color-scheme: light dark;
         font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
       }
-      body { margin: 0; padding: 1.25rem; line-height: 1.5; }
-      h1 { font-size: 1.25rem; margin: 0 0 0.25rem; }
-      .sub { color: #888; font-size: 0.85rem; margin: 0 0 1.25rem; }
-      section { margin-bottom: 2rem; }
-      h2 { font-size: 1rem; border-bottom: 1px solid #8884; padding-bottom: 0.25rem; }
-      table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
-      th, td { text-align: left; padding: 0.35rem 0.6rem; border-bottom: 1px solid #8883; }
+      * { box-sizing: border-box; }
+      body { margin: 0; padding: 1rem; line-height: 1.5; }
+      h1 { font-size: 1.2rem; margin: 0 0 0.2rem; }
+      .sub { color: #888; font-size: 0.8rem; margin: 0 0 1rem; }
+      h2 { font-size: 0.95rem; margin: 0 0 0.6rem; border-bottom: 1px solid #8884; padding-bottom: 0.25rem; }
+
+      /* 3 ペイン: 左=runs / 中央=timeline / 右=leaderboard */
+      .grid {
+        display: grid;
+        grid-template-columns: 16rem 1fr 22rem;
+        gap: 1rem;
+        align-items: start;
+      }
+      @media (max-width: 980px) { .grid { grid-template-columns: 1fr; } }
+      .pane { min-width: 0; }
+
+      table { border-collapse: collapse; width: 100%; font-size: 0.82rem; }
+      th, td { text-align: left; padding: 0.3rem 0.5rem; border-bottom: 1px solid #8883; }
       th { font-weight: 600; color: #888; }
       td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
       a { color: #4ea1ff; cursor: pointer; text-decoration: none; }
       a:hover { text-decoration: underline; }
-      .badge { display: inline-block; padding: 0 0.4rem; border-radius: 0.5rem; font-size: 0.7rem; }
+
+      .runrow { cursor: pointer; }
+      .runrow.sel { background: #4ea1ff22; }
+      .runrow td:first-child { font-size: 0.78rem; word-break: break-all; }
+
+      .badge { display: inline-block; padding: 0 0.4rem; border-radius: 0.5rem; font-size: 0.68rem; white-space: nowrap; }
       .ok { background: #2e7d3233; color: #4caf50; }
+      .partial { background: #f9a82533; color: #f9a825; }
+      .error { background: #c6282833; color: #e57373; }
+      .running { background: #4ea1ff33; color: #4ea1ff; }
+      .pending { background: #88888822; color: #999; }
       .none { background: #88888833; color: #999; }
-      .empty { color: #999; font-style: italic; }
-      pre {
-        background: #8881; padding: 0.75rem; border-radius: 0.4rem;
-        overflow: auto; font-size: 0.78rem; max-height: 24rem;
-      }
-      .detail { margin-top: 0.75rem; }
+
+      .empty { color: #999; font-style: italic; font-size: 0.82rem; }
       .err { color: #e57373; }
+
+      /* タイムライン */
+      .tl { list-style: none; margin: 0; padding: 0; }
+      .tl li {
+        display: grid;
+        grid-template-columns: 3rem 1fr auto;
+        gap: 0.5rem;
+        align-items: center;
+        padding: 0.35rem 0.5rem;
+        border-left: 3px solid #8884;
+      }
+      .tl li.ok { border-left-color: #4caf50; }
+      .tl li.partial { border-left-color: #f9a825; }
+      .tl li.error { border-left-color: #e57373; }
+      .tl li.running { border-left-color: #4ea1ff; }
+      .tl .ph { font-weight: 600; }
+      .tl .meta { color: #888; font-size: 0.72rem; }
+      .tl .ts { color: #888; font-size: 0.72rem; font-variant-numeric: tabular-nums; }
+
+      /* leaderboard バー */
+      .lb-bar-wrap { background: #8882; border-radius: 0.25rem; height: 0.85rem; overflow: hidden; }
+      .lb-bar { height: 100%; background: #4ea1ff; }
+
+      pre {
+        background: #8881; padding: 0.6rem; border-radius: 0.4rem;
+        overflow: auto; font-size: 0.74rem; max-height: 18rem;
+      }
+      .detail { margin-top: 0.6rem; }
     </style>
   </head>
   <body>
     <h1>Taikai-killer — dashboard-lite</h1>
     <p class="sub">read-only / node 標準のみ / 自前最小ダッシュボード（参考用 speca とは別）</p>
 
-    <section>
-      <h2>Leaderboard</h2>
-      <div id="leaderboard">loading…</div>
-    </section>
+    <div class="grid">
+      <!-- 左: run 一覧（新しい順 / passed・ratio バッジ） -->
+      <section class="pane">
+        <h2>Runs</h2>
+        <div id="runs">loading…</div>
+      </section>
 
-    <section>
-      <h2>Runs</h2>
-      <div id="runs">loading…</div>
-    </section>
+      <!-- 中央: 選択 run のフェーズ進捗タイムライン（SSE ライブ） -->
+      <section class="pane">
+        <h2 id="tl-title">Phase timeline</h2>
+        <div id="timeline" class="empty">run を選択してください</div>
+        <div id="detail-section" class="detail" hidden>
+          <strong>result.json</strong>
+          <pre id="detail-result"></pre>
+        </div>
+      </section>
 
-    <section id="detail-section" hidden>
-      <h2 id="detail-title">Run detail</h2>
-      <div class="detail">
-        <strong>result.json</strong>
-        <pre id="detail-result"></pre>
-      </div>
-      <div class="detail">
-        <strong>events/pipeline.jsonl</strong>
-        <pre id="detail-events"></pre>
-      </div>
-    </section>
+      <!-- 右: leaderboard（score 降順テーブル + バー） -->
+      <section class="pane">
+        <h2>Leaderboard</h2>
+        <div id="leaderboard">loading…</div>
+      </section>
+    </div>
 
     <script>
       const $ = (id) => document.getElementById(id);
+
+      // XSS エスケープ（既存方針を維持: textContent を使えない innerHTML 経路で必ず通す）。
       const esc = (s) =>
         String(s).replace(/[&<>"]/g, (c) =>
           ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]),
@@ -75,67 +124,127 @@
         return v === undefined || v === null ? "" : v;
       }
 
+      // ───────── 純ロジック（readers.ts の buildPhaseTimeline / rankLeaderboard と同契約） ─────────
+      // server 側の readers.ts でテスト済みのロジックをクライアントでも同形に保つ。
+
+      const STATUS_RANK = { pending: 0, running: 1, ok: 2, partial: 3, error: 4 };
+      function worseStatus(a, b) {
+        return STATUS_RANK[a] >= STATUS_RANK[b] ? a : b;
+      }
+
+      // events 配列 → S1..S6 フェーズ進捗行（readers.ts buildPhaseTimeline と同契約）。
+      function buildPhaseTimeline(events) {
+        const rows = new Map();
+        for (const ev of events) {
+          let kind, phase, ts, status;
+          if (ev.type === "PhaseStarted") { kind = "started"; phase = ev.phase; ts = ev.ts || ""; }
+          else if (ev.type === "PhaseCompleted") { kind = "completed"; phase = ev.phase; ts = ev.ts || ""; status = ev.status; }
+          else if (ev.type === "PhaseFailed") { kind = "failed"; phase = ev.phase; ts = ev.ts || ""; }
+          else continue;
+          let row = rows.get(phase);
+          if (!row) {
+            row = { phase, startedTs: undefined, completedTs: undefined, status: "pending", startedCount: 0, completedCount: 0, failedCount: 0 };
+            rows.set(phase, row);
+          }
+          if (kind === "started") {
+            row.startedCount += 1;
+            if (row.startedTs === undefined) row.startedTs = ts;
+            if (row.status === "pending") row.status = "running";
+          } else if (kind === "completed") {
+            row.completedCount += 1;
+            row.completedTs = ts;
+            const s = status === "partial" ? "partial" : status === "error" ? "error" : "ok";
+            row.status = worseStatus(row.status === "pending" ? "running" : row.status, s);
+          } else {
+            row.failedCount += 1;
+            row.completedTs = ts;
+            row.status = worseStatus(row.status, "error");
+          }
+        }
+        return [...rows.values()].sort((a, b) => (a.phase < b.phase ? -1 : a.phase > b.phase ? 1 : 0));
+      }
+
+      // leaderboard → score 降順 + バー幅（readers.ts rankLeaderboard と同契約）。
+      function rankLeaderboard(entries) {
+        const scoreOf = (e) => (typeof e.score === "number" && Number.isFinite(e.score) ? e.score : 0);
+        const sorted = [...entries].sort((a, b) => scoreOf(b) - scoreOf(a));
+        const max = sorted.reduce((m, e) => Math.max(m, scoreOf(e)), 0);
+        return sorted.map((entry, i) => ({
+          entry,
+          rank: i + 1,
+          barPct: max > 0 ? Math.max(0, Math.min(100, (scoreOf(entry) / max) * 100)) : 0,
+        }));
+      }
+
+      // ───────── 右: leaderboard ─────────
       async function loadLeaderboard() {
         const el = $("leaderboard");
         try {
-          const rows = await getJson("/api/leaderboard");
+          const rows = rankLeaderboard(await getJson("/api/leaderboard"));
           if (!rows.length) {
             el.innerHTML = '<p class="empty">leaderboard.json が空です</p>';
             return;
           }
-          // score 降順で見やすく（同点は元の順）
-          rows.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
           const body = rows
             .map(
-              (e) => `<tr>
-                <td>${esc(e.run_id)}</td>
-                <td>${esc(e.strategy_id)}</td>
-                <td>${esc(e.rubric_ref)}</td>
-                <td class="num">${num(e.score)}</td>
-                <td class="num">${num(e.passed_test_ratio)}</td>
-                <td>${esc(e.ts ?? "")}</td>
+              (r) => `<tr>
+                <td class="num">${r.rank}</td>
+                <td>${esc(r.entry.strategy_id)}<div class="meta" style="color:#888;font-size:0.7rem">${esc(r.entry.run_id)}</div></td>
+                <td class="num">${num(r.entry.score)}</td>
+                <td style="width:6rem"><div class="lb-bar-wrap"><div class="lb-bar" style="width:${r.barPct}%"></div></div></td>
               </tr>`,
             )
             .join("");
           el.innerHTML = `<table>
-            <thead><tr><th>run</th><th>strategy</th><th>rubric</th>
-              <th>score</th><th>pass ratio</th><th>ts</th></tr></thead>
+            <thead><tr><th>#</th><th>strategy / run</th><th>score</th><th>bar</th></tr></thead>
             <tbody>${body}</tbody></table>`;
         } catch (err) {
           el.innerHTML = `<p class="err">${esc(err.message)}</p>`;
         }
       }
 
+      // ───────── 左: runs（新しい順 / passed・events バッジ） ─────────
+      let selectedRun = null;
+
       async function loadRuns() {
         const el = $("runs");
         try {
-          const runs = await getJson("/api/runs");
+          const runs = await getJson("/api/runs"); // server 側で mtime 降順
           if (!runs.length) {
             el.innerHTML = '<p class="empty">run がありません</p>';
             return;
           }
           const body = runs
             .map(
-              (r) => `<tr>
-                <td><a data-run="${esc(r.id)}">${esc(r.id)}</a></td>
-                <td>${r.hasResult ? '<span class="badge ok">result</span>' : '<span class="badge none">no result</span>'}</td>
-                <td>${r.hasEvents ? '<span class="badge ok">events</span>' : '<span class="badge none">no events</span>'}</td>
+              (r) => `<tr class="runrow" data-run="${esc(r.id)}">
+                <td>${esc(r.id)}</td>
+                <td>${r.hasResult ? '<span class="badge ok">result</span>' : '<span class="badge none">no result</span>'}
+                    ${r.hasEvents ? '<span class="badge running">events</span>' : '<span class="badge none">no events</span>'}</td>
               </tr>`,
             )
             .join("");
           el.innerHTML = `<table>
-            <thead><tr><th>run id</th><th>result</th><th>events</th></tr></thead>
+            <thead><tr><th>run id</th><th>status</th></tr></thead>
             <tbody>${body}</tbody></table>`;
-          el.querySelectorAll("a[data-run]").forEach((a) =>
-            a.addEventListener("click", () => showDetail(a.dataset.run)),
+          el.querySelectorAll("tr.runrow").forEach((tr) =>
+            tr.addEventListener("click", () => selectRun(tr.dataset.run)),
           );
+          // 既選択があれば再描画後もハイライトを保つ
+          if (selectedRun) markSelected(selectedRun);
         } catch (err) {
           el.innerHTML = `<p class="err">${esc(err.message)}</p>`;
         }
       }
 
-      // 開いている detail の SSE 購読。run を切り替えたら前の購読を閉じる。
+      function markSelected(id) {
+        document
+          .querySelectorAll("tr.runrow")
+          .forEach((tr) => tr.classList.toggle("sel", tr.dataset.run === id));
+      }
+
+      // ───────── 中央: timeline（SSE ライブ） ─────────
       let activeStream = null;
+      let liveEvents = []; // SSE で蓄積した生イベント（timeline 再構築のソース）
 
       function closeStream() {
         if (activeStream) {
@@ -144,65 +253,94 @@
         }
       }
 
-      // フォールバック: EventSource 不可 or stream エラー時は従来 fetch で1回取得。
-      async function loadEventsFallback(id, eEl) {
-        try {
-          const events = await getJson(
-            "/api/runs/" + encodeURIComponent(id) + "/events",
-          );
-          eEl.textContent = events.length
-            ? events.map((e) => JSON.stringify(e)).join("\n")
-            : "(no events)";
-        } catch (err) {
-          eEl.textContent = err.message;
-        }
-      }
+      const STATUS_LABEL = {
+        pending: "pending",
+        running: "running…",
+        ok: "ok",
+        partial: "partial",
+        error: "error",
+      };
 
-      // SSE で live 購読。最初のイベントで "loading…" を消し、以後 append。
-      function subscribeEvents(id, eEl) {
-        if (typeof EventSource === "undefined") {
-          loadEventsFallback(id, eEl);
+      function renderTimeline() {
+        const el = $("timeline");
+        const rows = buildPhaseTimeline(liveEvents);
+        if (!rows.length) {
+          el.className = "empty";
+          el.textContent = liveEvents.length ? "(フェーズイベントなし)" : "(イベント待ち…)";
           return;
         }
-        const lines = [];
-        let started = false;
-        const url = "/api/runs/" + encodeURIComponent(id) + "/stream";
-        const es = new EventSource(url);
+        el.className = "";
+        const items = rows
+          .map((r) => {
+            const meta = [];
+            if (r.startedCount > 1 || r.completedCount > 1)
+              meta.push(`W${r.startedCount}/done ${r.completedCount}`);
+            if (r.failedCount) meta.push(`failed ${r.failedCount}`);
+            const ts = r.completedTs || r.startedTs || "";
+            return `<li class="${r.status}">
+              <span class="ph">${esc(r.phase)}</span>
+              <span><span class="badge ${r.status}">${STATUS_LABEL[r.status]}</span>
+                ${meta.length ? `<span class="meta"> ${esc(meta.join(" · "))}</span>` : ""}</span>
+              <span class="ts">${esc(ts)}</span>
+            </li>`;
+          })
+          .join("");
+        el.innerHTML = `<ul class="tl">${items}</ul>`;
+      }
+
+      // フォールバック: EventSource 不可 / stream エラー時は従来 fetch で1回取得。
+      async function loadEventsFallback(id) {
+        try {
+          liveEvents = await getJson("/api/runs/" + encodeURIComponent(id) + "/events");
+        } catch {
+          liveEvents = [];
+        }
+        renderTimeline();
+      }
+
+      function subscribeEvents(id) {
+        liveEvents = [];
+        renderTimeline();
+        if (typeof EventSource === "undefined") {
+          loadEventsFallback(id);
+          return;
+        }
+        const es = new EventSource("/api/runs/" + encodeURIComponent(id) + "/stream");
         activeStream = es;
         es.onmessage = (msg) => {
-          if (!started) {
-            started = true;
-            eEl.textContent = "";
+          try {
+            liveEvents.push(JSON.parse(msg.data));
+            renderTimeline();
+          } catch {
+            // 壊れた data 行は無視（観測用に頑健）
           }
-          lines.push(msg.data);
-          eEl.textContent = lines.join("\n");
         };
         es.onerror = () => {
-          // 接続失敗（stream 非対応サーバ等）。購読を閉じて fetch にフォールバック。
           es.close();
           if (activeStream === es) activeStream = null;
-          if (!started) loadEventsFallback(id, eEl);
+          if (!liveEvents.length) loadEventsFallback(id);
         };
       }
 
-      async function showDetail(id) {
-        closeStream();
-        $("detail-section").hidden = false;
-        $("detail-title").textContent = "Run detail — " + id;
+      async function loadResult(id) {
         const rEl = $("detail-result");
-        const eEl = $("detail-events");
+        $("detail-section").hidden = false;
         rEl.textContent = "loading…";
-        eEl.textContent = "loading…";
         try {
-          const result = await getJson(
-            "/api/runs/" + encodeURIComponent(id) + "/result",
-          );
+          const result = await getJson("/api/runs/" + encodeURIComponent(id) + "/result");
           rEl.textContent = result === null ? "(no result.json)" : JSON.stringify(result, null, 2);
         } catch (err) {
           rEl.textContent = err.message;
         }
-        subscribeEvents(id, eEl);
-        $("detail-section").scrollIntoView({ behavior: "smooth" });
+      }
+
+      function selectRun(id) {
+        selectedRun = id;
+        markSelected(id);
+        closeStream();
+        $("tl-title").textContent = "Phase timeline — " + id;
+        subscribeEvents(id);
+        loadResult(id);
       }
 
       loadLeaderboard();

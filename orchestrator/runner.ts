@@ -22,6 +22,8 @@ import { CircuitBreaker } from "./circuitBreaker.ts";
 import { dedupStrategies } from "./collector.ts";
 import { validateArtifact } from "./validate.ts";
 import { backupResult } from "./backup.ts";
+import { runBattleEval } from "./s6battle.ts";
+import type { BattlePlayer } from "./battleRunner.ts";
 import {
   partialsDir,
   logsDir,
@@ -201,6 +203,12 @@ export async function runSlice(runDir: string): Promise<void> {
   const spec = existsSync(specPath) ? readFileSync(specPath, "utf8") : ti.name;
   const runId = relative("outputs", runDir) || "run";
   pipelineStarted(runDir, runId);
+
+  // ── S6 対戦モード分岐（eval_mode=battle）──
+  if (rubric.eval_mode === "battle") {
+    await runBattle(runDir, ti, rubric, runId);
+    return;
+  }
 
   // ── S3 戦略生成（cold-start: requirement/subject のみ）──
   console.log("[S3] 戦略生成…");
@@ -402,6 +410,62 @@ ${strategy.approach}
   if (bk.backedUp) console.log(`[backup] ${bk.copied.length} 件複製`);
   await notify(runDir, { type: "run_complete", passed, ratio, strategy: strategy.id });
   console.log(`[done] passed=${passed} ratio=${ratio}`);
+}
+
+// ───────── S6 対戦モード（戦略プログラム同士を実対戦）─────────
+
+async function runBattle(
+  runDir: string,
+  ti: TournamentInfo,
+  rubric: ScoringRubric,
+  runId: string,
+): Promise<void> {
+  const playersDir = join(runDir, "players");
+  if (!existsSync(playersDir)) {
+    console.error(`[S6 battle] ${playersDir} がない（players/{id}/ を用意せよ）`);
+    process.exit(1);
+  }
+  const players: BattlePlayer[] = readdirSync(playersDir, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => ({ id: d.name, run_cmd: ti.run_cmd, cwd: join(playersDir, d.name) }));
+  if (players.length < 2) {
+    console.error(`[S6 battle] プレイヤーが2未満（${players.length}）`);
+    process.exit(1);
+  }
+  console.log(`[S6 battle] ${players.length} player 総当たり…`);
+  const results = await runBattleEval(
+    players,
+    { derived_from: rubric.derived_from, eval_mode: "battle" },
+    20,
+    { runId, moveTimeoutMs: 10_000 },
+  );
+  results.forEach((r, i) => writePartial<BenchResult>(runDir, "S6", 0, i, r, prov("S6", [r.strategy_id])));
+  const top = results.find((r) => r.rank === 1) ?? results[0];
+  if (top) writeJson(resultPath(runDir), top);
+  phaseCompleted(runDir, "S6", "ok");
+  for (const r of results) {
+    appendLeaderboard({
+      run_id: runId,
+      strategy_id: r.strategy_id,
+      rubric_ref: r.rubric_ref,
+      score: r.score,
+      passed_test_ratio: r.win_rate ?? 0,
+      result_ref: resultPath(runDir),
+      ts: isoNow(),
+    });
+  }
+  await notify(runDir, {
+    type: "battle_complete",
+    players: players.length,
+    winner: top?.strategy_id,
+    win_rate: top?.win_rate,
+  });
+  console.log(
+    `[done] battle winner=${top?.strategy_id ?? "?"} win_rate=${top?.win_rate?.toFixed(3) ?? "?"}`,
+  );
+  for (const r of results) {
+    console.log(`  #${r.rank} ${r.strategy_id}: win_rate=${(r.win_rate ?? 0).toFixed(3)}`);
+  }
 }
 
 // ───────── 補助 ─────────

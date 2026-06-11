@@ -13,7 +13,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { resultPath } from "../orchestrator/paths.ts";
 import { readEvents as readPipelineEvents, pipelineLogPath } from "../orchestrator/events.ts";
-import type { BenchResult, LeaderboardEntry } from "../orchestrator/types.ts";
+import type { BenchResult, LeaderboardEntry, PhaseStatus } from "../orchestrator/types.ts";
 import type { PipelineEvent } from "../orchestrator/events.ts";
 
 /** 1 run の一覧表示用サマリ（重い payload は読まず軽量メタのみ）。 */
@@ -116,6 +116,142 @@ export interface EventsSince {
  * 注意: ファイルが途中で短くなる（切詰め）ケースは append-only 前提では起きないため扱わない
  * （万一 offset > size でも events 空・offset=size に倒して安全側）。
  */
+// ───────── dashboardFull 用の表示派生ロジック（純関数・テスト対象） ─────────
+//
+// 方針: ここは「events / leaderboard を**表示しやすい形に整える**」だけの純変換。
+// I/O は持たず（readEvents/readLeaderboard が読んだ配列を受け取る）、index.html の
+// JS と同じ計算を server 側でも検証できるようにする（XSS とは独立の純ロジック層）。
+
+/** タイムライン上の 1 フェーズの集約状態（S1..S6 の進捗カード1枚分）。 */
+export interface PhaseTimelineRow {
+  phase: string; // "S1".."S6"（events の phase 文字列をそのまま使う）
+  startedTs: string | undefined; // 最初の PhaseStarted の ts（無ければ undefined）
+  completedTs: string | undefined; // 最後の PhaseCompleted/PhaseFailed の ts
+  status: "pending" | "running" | "ok" | "partial" | "error"; // 集約状態
+  startedCount: number; // PhaseStarted の回数（worker/batch 並列で複数あり得る）
+  completedCount: number; // PhaseCompleted の回数
+  failedCount: number; // PhaseFailed の回数
+}
+
+/** events を時系列に保ったまま、phase 単位へ畳み込むための内部正規化エントリ。 */
+interface PhaseSignal {
+  phase: string;
+  kind: "started" | "completed" | "failed";
+  ts: string;
+  status?: PhaseStatus; // PhaseCompleted のみ持つ（ok/partial/error）
+}
+
+/** PhaseStarted/PhaseCompleted/PhaseFailed だけを時系列順に抽出する。
+ * - phase を持たないイベント（PipelineStarted 等）は無視。
+ * - ts 欠落は空文字に倒す（ソートで先頭に来るが落とさない）。 */
+function phaseSignals(events: readonly PipelineEvent[]): PhaseSignal[] {
+  const out: PhaseSignal[] = [];
+  for (const ev of events) {
+    if (ev.type === "PhaseStarted") {
+      out.push({ phase: ev.phase, kind: "started", ts: ev.ts ?? "" });
+    } else if (ev.type === "PhaseCompleted") {
+      out.push({ phase: ev.phase, kind: "completed", ts: ev.ts ?? "", status: ev.status });
+    } else if (ev.type === "PhaseFailed") {
+      out.push({ phase: ev.phase, kind: "failed", ts: ev.ts ?? "" });
+    }
+  }
+  return out;
+}
+
+/** 集約ステータスの優先度（悪い方を勝たせて表示する）。error > partial > ok > running > pending。 */
+function worseStatus(
+  a: PhaseTimelineRow["status"],
+  b: PhaseTimelineRow["status"],
+): PhaseTimelineRow["status"] {
+  const rank: Record<PhaseTimelineRow["status"], number> = {
+    pending: 0,
+    running: 1,
+    ok: 2,
+    partial: 3,
+    error: 4,
+  };
+  return rank[a] >= rank[b] ? a : b;
+}
+
+/**
+ * events 列から S1..S6 のフェーズ進捗タイムラインを組み立てる純関数（dashboardFull 中央パネル）。
+ *
+ * 契約（テスト対象）:
+ * - 出力は **events に出現したフェーズの phase 文字列順（昇順）** で安定ソート（"S1".."S6"）。
+ * - 1 フェーズに複数 worker/batch の Started/Completed が来ても 1 行に畳み込む（カウントで多重度を残す）。
+ * - status は集約: Completed/Failed が無く Started のみ → "running"、
+ *   PhaseFailed があれば "error"、PhaseCompleted の status を ok/partial/error として反映、
+ *   複数あれば worseStatus で悪い方を採用（partial 混在を見落とさない）。
+ * - startedTs は最初の Started、completedTs は最後の Completed/Failed の ts。
+ * - phase を持たないイベントは無視（PipelineStarted/CircuitBreakerTripped/BudgetExceeded）。
+ * - events が空なら空配列（呼び出し側で「まだイベントなし」を表示）。
+ */
+export function buildPhaseTimeline(events: readonly PipelineEvent[]): PhaseTimelineRow[] {
+  const rows = new Map<string, PhaseTimelineRow>();
+  for (const sig of phaseSignals(events)) {
+    let row = rows.get(sig.phase);
+    if (row === undefined) {
+      row = {
+        phase: sig.phase,
+        startedTs: undefined,
+        completedTs: undefined,
+        status: "pending",
+        startedCount: 0,
+        completedCount: 0,
+        failedCount: 0,
+      };
+      rows.set(sig.phase, row);
+    }
+    if (sig.kind === "started") {
+      row.startedCount += 1;
+      if (row.startedTs === undefined) row.startedTs = sig.ts;
+      if (row.status === "pending") row.status = "running";
+    } else if (sig.kind === "completed") {
+      row.completedCount += 1;
+      row.completedTs = sig.ts;
+      const s: PhaseTimelineRow["status"] =
+        sig.status === "partial" ? "partial" : sig.status === "error" ? "error" : "ok";
+      row.status = worseStatus(row.status === "pending" ? "running" : row.status, s);
+    } else {
+      row.failedCount += 1;
+      row.completedTs = sig.ts;
+      row.status = worseStatus(row.status, "error");
+    }
+  }
+  return [...rows.values()].sort((a, b) =>
+    a.phase < b.phase ? -1 : a.phase > b.phase ? 1 : 0,
+  );
+}
+
+/** leaderboard 表示用の 1 行（score 降順 + バー幅 %）。 */
+export interface RankedEntry {
+  entry: LeaderboardEntry;
+  rank: number; // 1 始まりの表示順位（同点は出現順で連番）
+  barPct: number; // 0..100。最大 score を 100% とした相対幅（全て <=0 のときは 0）
+}
+
+/**
+ * leaderboard を score 降順に並べ、バー幅（最大値比の %）を付与する純関数（dashboardFull 右パネル）。
+ *
+ * 契約（テスト対象）:
+ * - score 降順で安定ソート（同点は元の配列順を保つ＝Array.prototype.sort は安定）。
+ * - score 欠落/非数は 0 として扱う（観測用に頑健）。
+ * - barPct は max(score) を 100 とした 0..100 の相対幅。max<=0（全て 0/負）のとき全行 0。
+ * - rank は 1 始まりの表示順位（同点でも連番、tie 表示は UI 側の判断に委ねる）。
+ * - 入力は破壊しない（コピーしてソート）。
+ */
+export function rankLeaderboard(entries: readonly LeaderboardEntry[]): RankedEntry[] {
+  const scoreOf = (e: LeaderboardEntry): number =>
+    typeof e.score === "number" && Number.isFinite(e.score) ? e.score : 0;
+  const sorted = [...entries].sort((a, b) => scoreOf(b) - scoreOf(a));
+  const max = sorted.reduce((m, e) => Math.max(m, scoreOf(e)), 0);
+  return sorted.map((entry, i) => ({
+    entry,
+    rank: i + 1,
+    barPct: max > 0 ? Math.max(0, Math.min(100, (scoreOf(entry) / max) * 100)) : 0,
+  }));
+}
+
 export function readEventsSince(runDir: string, offset: number): EventsSince {
   const path = pipelineLogPath(runDir);
   if (!existsSync(path)) {
