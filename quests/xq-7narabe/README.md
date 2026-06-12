@@ -14,16 +14,30 @@ X Quest（7並べ）の数値最適化トラック（D18 ①: LLM 不要）用�
 
 docs/quests.md §4.3 と同内容を本クエスト側に再掲する。**誇張せず実測**で記録する（2026-06-13 時点）。
 
-1. **自動探索は動く・再現する**: `npm run taikai -- quest --quest xq --seed 42 --generations 15` で
-   **initial fitness 0.635 → best fitness 0.740（evals=16）**。`numericOptimizer`（ヒルクライム）が
-   弱い手動初期点から対 random 0.74 まで自動で引き上げ、`best_params.json` に焼き込む。決定的・bit 一致。
-2. **ただし GA best は手調整 default に負けている**（要記録の不整合）: GA-best（`best_params.json`）を
-   対 random・games=300・seed 0..3 で採点すると平均 **0.720**、一方 `ai_param.py` の手調整済み
-   `default_params()` は平均 **0.738**（4 seed 中 3 seed で default が上）。原因は `xqAdapter.ts` の
-   `initialCandidate`（探索の出発点）が **2025 由来の古い弱い値（対 random 0.635）のまま**で、後から
-   強化された `ai_param.py default_params`（0.752）と**同期していない**こと。`xqAdapter.ts` は共有 .ts
-   （本担当は読むだけ）なので、ここでは事実として記録するに留める（修正は adapter 担当の領域）。
-   「探索後 0.74」を**手調整 default 超えと誇張してはいけない**。
+1. **自動探索は動く・再現する**: `npm run taikai -- quest --quest xq --seed 42 --generations 15` が
+   探索 best を `best_params.json` に焼き込む。**数値の正は焼き込み済み `best_params.json` の再採点値**:
+   現 `best_params.json` を `evaluate.py` で games=100・seed=0・対 random で採点すると **win_rate 0.750**、
+   同条件の初期点 `initialCandidate` は **0.635**（＝**initial 0.635 → 焼き込み best 0.750**、決定的・bit 一致）。
+   `numericOptimizer`（ヒルクライム）が弱い手動初期点から対 random を引き上げた差分がこれ。
+2. **ただし GA best は手調整 default を超えていない**（拮抗・要記録）: 現 GA-best（`best_params.json` の
+   コミット済み現物）を対 random・games=300・seed 0..3 で採点すると平均 **0.736**、一方 `ai_param.py` の
+   手調整済み `default_params()` は平均 **0.738**（差 0.002 でほぼ拮抗。seed 別は default seed0,3 勝 /
+   GA seed1 勝 / seed2 同点＝2 勝 1 勝 1 分）。
+
+   | 採点 seed | GA-best（現 best_params.json） | 手調整 default | 勝敗 |
+   |---|---|---|---|
+   | 0 | 0.745 | 0.752 | default |
+   | 1 | 0.712 | 0.700 | GA |
+   | 2 | 0.745 | 0.745 | 同点 |
+   | 3 | 0.742 | 0.757 | default |
+   | **平均** | **0.736** | **0.738** | 拮抗 |
+
+   原因は `xqAdapter.ts` の `initialCandidate`（探索の出発点）が **2025 由来の古い弱い値
+   （games=100・seed=0 で 0.635）のまま**で、後から強化された `ai_param.py default_params`（同条件 0.752）と
+   **同期していない**こと。`xqAdapter.ts` は共有 .ts（本担当は読むだけ）なので、ここでは事実として記録する
+   に留める（initialCandidate の同期修正は adapter 担当の領域）。「探索後 0.74」を**手調整 default 超えと
+   誇張してはいけない**（実測は拮抗で超過は未確立）。**この表を更新するときは `best_params.json` も同時に
+   commit し、再採点（下の再現コマンド）で bit 一致する状態を保つこと**。
 3. **budget を上げる道筋**: 事前実行＝時間制約なしなので `--generations` 増・`evaluate` の `games` 増・
    `restartAfter`・`populationGA`（実装済み未配線）への切替で伸ばせる。だが**最優先は (2) の出発点ズレ
    解消**（これが最大効果。budget 不足が上限ではない）。
@@ -32,7 +46,8 @@ docs/quests.md §4.3 と同内容を本クエスト側に再掲する。**誇張
    いない。(4-2) MC（簡易 PIMC）は 3 人卓 literal 勝率で **seed・sim_count 依存に 0.35〜0.57 で揺れ、
    単調でも安定 > 0.5 でもない**（下「決定化 Monte-Carlo」節の実測）。(4-3) 本番の相手 AI は未知で、
    現評価器（対 random／自己ヒューリスティック／medium）はプロキシに過ぎず本番勝率を保証しない。
-   **確立しているのは「自動探索が弱い初期点を対 random で 0.635→0.740 へ改善する配線と再現性」まで**。
+   **確立しているのは「自動探索が弱い初期点を対 random で 0.635→0.750 へ改善する配線と再現性」まで**
+   （games=100・seed=0・現 `best_params.json` 再採点）。default 超え・強い相手超え・本番強者超えは未確立。
 
 ## ファイル構成
 
@@ -122,6 +137,22 @@ $ for i in 1 2 3; do echo '{"params":{"w_edge_distance":2.0},"games":150,"seed":
 {"win_rate": 0.7, "first_place_rate": 0.5733333333333334, "avg_rank": 1.6, "games": 150, "vs": "random"}
 {"win_rate": 0.7, "first_place_rate": 0.5733333333333334, "avg_rank": 1.6, "games": 150, "vs": "random"}
 {"win_rate": 0.7, "first_place_rate": 0.5733333333333334, "avg_rank": 1.6, "games": 150, "vs": "random"}
+```
+
+### GA-best vs 手調整 default の再現（上「勝ち筋の現状」(2) の表）
+
+現 `best_params.json`（コミット済み現物）と既定 `default_params()` を対 random・games=300・seed 0..3 で
+直接採点する。出力は上の表（GA-best 平均 0.736 / default 平均 0.738）と bit 一致する。**表を更新する
+ときは `best_params.json` も同時に commit し、この再採点で一致する状態を保つこと。**
+
+```console
+$ for s in 0 1 2 3; do
+    python -c "import json;print(json.dumps({'params':json.load(open('best_params.json')),'games':300,'seed':$s,'opponents':2}))" | python evaluate.py
+    echo "{\"params\":{},\"games\":300,\"seed\":$s,\"opponents\":2}" | python evaluate.py
+  done
+# seed0: GA 0.745 / default 0.752  seed1: GA 0.712 / default 0.700
+# seed2: GA 0.745 / default 0.745  seed3: GA 0.742 / default 0.757
+# 平均   GA 0.736 / default 0.738（拮抗）
 ```
 
 ### evaluate.py（固定中級ヒューリスティック相手）
@@ -216,18 +247,23 @@ docs/quests.md §4.1 の「7並べは PIMC（相手手札を多数サンプリ�
 > 非単調で、最高 budget でむしろ 0.5 を割る。`ai_mc.py`／`evaluate_mc.py` の docstring が掲げる
 > 「単調に強くなる／明確に勝ち越す」も同様に**過大**である。以下は誇張のない実測。
 
-`sim_count` スイープ（対ヒューリスティック ×2 の 3 人卓・既定 params・games=30・seed=0・決定的）:
+`sim_count` スイープ（対ヒューリスティック ×2 の 3 人卓・既定 params・**games=30・seed=0**・決定的。
+**MC は重く、games=30・sim_count=200 で 1 点あたり分オーダー**＝再測コストが高い。以下は**単一 seed
+（seed=0）の一例・分散大**で、絶対値より「非単調・~0.5・高 budget で 0.5 割れ」という定性傾向を読むこと）:
 
 ```text
-sim_count=10   win_rate=0.500
-sim_count=30   win_rate=0.500
-sim_count=100  win_rate=0.567
-sim_count=200  win_rate=0.433   ← 最高 budget で 0.5 を割る（非単調）
+sim_count=10   win_rate=0.500   (games=30, seed=0)
+sim_count=30   win_rate=0.500   (games=30, seed=0)
+sim_count=100  win_rate=0.400   (games=30, seed=0, 再測 ~279s) ← 単一 seed の一例・分散大
+sim_count=200  win_rate=0.433   (games=30, seed=0, 再測 ~552s) ← 高 budget でも 0.5 割れ（非単調）
 ```
 
-→ **単調に伸びない**（100 で 0.567 まで上がっても 200 で 0.433 へ下がる）。3 人卓・games=30 の
-標準誤差は約 0.09 と大きく、各点が席運・決定化ノイズで揺れるため、この games・seed では
-`sim_count` の増加が安定した勝率向上に**つながっていない**。
+→ **単調に伸びない／0.5 を安定して超えない**（10/30 で 0.5、100 で 0.400、200 で 0.433 と上下し、
+高 budget でも 0.5 割れ）。3 人卓・games=30 の標準誤差は約 0.09 と大きく、**これらピンポイント値は
+この大きい誤差の範囲内の単一 seed（seed=0）の一例**で、seed を変えれば容易に上下する（値そのものより
+「非単調・~0.5・高 budget で 0.5 割れ」という定性傾向を読むこと）。**MC は重く 1 点あたり分オーダー**
+（上記 sim_count=100 は約 279s・200 は約 552s、いずれも 2026-06-13 再測）。再測は上記コマンドを
+seed・games を変えて複数回回し平均を取ること（所要時間に留意）。
 
 seed を変えても 0.5 前後で割れる（games=30・sim_count=100・複数 seed・別途実測）: 0.33〜0.57 の幅で
 揺れ、単一 seed で > 0.5 を保証できない。games を減らすとさらに振れる（games=20・seed=0・
