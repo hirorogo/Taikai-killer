@@ -35,6 +35,7 @@
 | ぐるぐる | `taikai loop` | doctor(一度) | hook | 戦略生成(勝者再投入=いいとこ取り) | hook | D22 実装 | test採点 | **収束まで** S3→S5→S6→再投入を反復 | `runLoop` |
 | 数値クエスト | `taikai quest` | - | - | - | - | - | 数値評価関数(=S6の評価器) | GA で **世代** 反復（LLM不要） | `quest/runQuest` |
 | （補助）数値進化 | `taikai evolve` | - | - | - | - | - | janken 勝率(=評価関数) | ヒルクライム反復 | `evolution/evolveDemo` |
+| （未実装）コオエボ | `taikai coevolve` | - | - | - | - | - | 現チャンピオン対戦勝率(=進化する評価器) | 軍拡競争で **世代** 反復（勝てた挑戦者だけ昇格） | 未配線（`index.ts` switch に無し） |
 
 補足:
 
@@ -46,6 +47,11 @@
   GA／ヒルクライムで数千〜数万回呼ぶ「閾値・パラメータ最適化トラック」。S1..S5 の LLM フェーズは通らない。
 - **quest の 4 種（X/AI/Robo/Data）**: `--quest xq|ai|robo|data` で `QuestAdapter` を差し替え（`quest/*Adapter.ts`）。
   どれも `initialCandidate()`→`evaluate()` の数値クエストで、`runQuest` 共通エンジン（`populationGA.ts`）が回す。
+- **coevolve（未実装・配線予定）= 固定 fitness の対**: `taikai quest` の評価器は**固定の相手**（X なら random/medium・他は held-out 指標）で
+  地形が定数だが、`taikai coevolve` は評価器の「相手」を**現チャンピオン**にして、勝てた挑戦者だけを昇格させる軍拡競争トラック。
+  進化する評価器に対して最適化する点が固定 fitness との本質差（FunSearch/AlphaEvolve の核）。設計・原理は
+  [quests.md §7](./quests.md)。**現状 `index.ts` の switch には無く未実装**で、相手に任意 params を据える `evaluate.py` 入力契約の
+  拡張も含めて配線は別担当。実測値は実装後に quests.md §7.5 の枠へ入れる（現時点で固定 fitness 超えは未実証＝主張しない）。
 
 ---
 

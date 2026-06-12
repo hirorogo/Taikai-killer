@@ -63,6 +63,21 @@ async function main(): Promise<void> {
       await doctor(runDir);
       break;
     }
+    case "coevolve": {
+      // 自己対戦コオエボリューション: 現champion に勝つ challenger を GA で探し、勝てば交代（軍拡競争）
+      const { coevolveXq } = await import("./quest/coevolve.ts");
+      const seed = Number(getOpt("seed") ?? 42);
+      const rounds = Number(getOpt("rounds") ?? 5);
+      const popSize = Number(getOpt("popSize") ?? 6);
+      const generations = Number(getOpt("generations") ?? 4);
+      const games = Number(getOpt("games") ?? 60);
+      const res = await coevolveXq({ seed, rounds, popSize, generations, games });
+      const promotions = res.rounds.filter((r) => r.promoted).length;
+      console.log(`[coevolve:xq] ${rounds}round / 昇格 ${promotions}回`);
+      console.log(`[coevolve] trajectory=${res.trajectory.map((t) => t.toFixed(3)).join(" -> ")}`);
+      console.log(`[coevolve] champion → quests/xq-7narabe/champion_params.json`);
+      break;
+    }
     case "loop": {
       // ぐるぐる回る本体: S1一度 → S3→S5→S6 を結果再投入＋いいとこ取りで回し続ける（収束で停止）
       const { runLoop } = await import("./runner.ts");
@@ -125,7 +140,7 @@ async function main(): Promise<void> {
       break;
     }
     default:
-      console.error("usage: taikai <probe|run|doctor|status|evolve|experiment|quest|loop> [--run-dir <path>] [--quest xq|ai|robo|data] [--max-rounds N] [--patience N] [--generations N] [--rounds N] [--topK N] [--seed N] [--iterations N]");
+      console.error("usage: taikai <probe|run|doctor|status|evolve|experiment|quest|coevolve|loop> [--run-dir <path>] [--quest xq|ai|robo|data] [--ga N] [--rounds N] [--popSize N] [--games N] [--max-rounds N] [--patience N] [--generations N] [--topK N] [--seed N]");
       process.exit(2);
   }
 }
