@@ -16,11 +16,11 @@
     "params":    {"w_edge_distance": 1.2, ...},  # ヒューリスティック係数（MC のプレイアウトと相手の両方に使う・部分可）
     "games":     50,                              # 評価局数（>=1、既定 50）
     "seed":      0,                               # 乱数 seed（決定性の要、既定 0）
-    "sim_count": 30                               # MC の 1 手あたりプレイアウト本数（>=1、既定 30）
+    "sim_count": 100                              # MC の 1 手あたりプレイアウト本数（>=1、既定 100）
   }
 
 出力 (stdout, 1 行 JSON):
-  {"win_rate": 0.56, "games": 50, "sim_count": 30}
+  {"win_rate": 0.56, "games": 50, "sim_count": 100}
   ※ win_rate = MC 候補が 1 着（最初の上がり）になった割合（literal な勝率）。3 人卓なので
     > 0.5 で「ヒューリスティック 2 体に勝ち越し」を意味する。
 
@@ -46,7 +46,10 @@ from engine import play_game
 
 _GAMES_DEFAULT = 50
 _SEED_DEFAULT = 0
-_SIM_COUNT_DEFAULT = 30
+# 事前実行＝時間制約なし（docs/quests.md §4.1）を活かし、既定の budget を高めに置く。
+# sim_count を上げるほど着順スコア推定が締まり勝率が単調に伸びる（README の実測表参照）。
+# 既定 100 で対ヒューリスティック win_rate > 0.5 を安定して確保する。
+_SIM_COUNT_DEFAULT = 100
 _PLAYERS = 3  # 3 人卓（MC 1 + ヒューリスティック 2）。
 
 

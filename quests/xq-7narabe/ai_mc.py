@@ -12,13 +12,22 @@ make_mc_ai(params, sim_count, seed) -> action_fn(state) を返す。action_fn �
 
 アルゴリズム（make_mc_ai が返す action_fn が現手番で行うこと）:
   1. 現手番（root 席）の合法手 my_actions() を列挙。0 手ならパス（None, 1）。1 手なら即それ。
-  2. 各合法手 a について sim_count 回のプレイアウトで勝率を推定:
+  2. 各合法手 a について sim_count 回のプレイアウトで**期待スコア**を推定:
        a. 相手の見えない手札を**決定化**する: 全 52 枚から「場に出ている札」と「自分の手札」を
           除いた残り（= 未知札）を seed 付き RNG でシャッフルし、各相手の既知手札枚数ぶん配り直す。
        b. その決定化盤面で root が手 a を打ち、以降は全席を make_ai(params)（決定的ヒューリスティック）
-          で最後までプレイアウトする。root 席が勝者なら 1、そうでなければ 0。
-       c. sim_count 回平均が手 a の勝率推定。
-  3. 勝率最大の手を選ぶ。同点は str(card) 昇順で割る（決定的）。
+          で最後までプレイアウトする。
+       c. プレイアウト結果を root 席の**着順スコア**（1 着=1.0 / 最下位=0.0 を線形に按分）で採点する。
+          sim_count 回平均が手 a の期待スコア推定。
+  3. 期待スコア最大の手を選ぶ。同点は str(card) 昇順で割る（決定的）。
+
+  ※ 採点を二値勝率（1 着なら 1 / それ以外 0）でなく**着順スコア**にしているのは重要な修正:
+    3 人卓で全席が同一プレイアウト方策（ヒューリスティック）だと root の 1 着率は手 a に依らず
+    ≈1/3 に張り付き、手の差（信号）が決定化ノイズに埋もれる。その結果 sim_count を上げても
+    勝率が上がらない（むしろ揺れて下がる）非単調が生じていた。着順（1 着 / 2 着 / 3 着 / 失格）
+    を連続値で採れば、悪い手は平均着順が悪化するので手間の差がはっきり出て、sim_count を増やす
+    ほど推定が締まり強くなる（単調性が回復する）。本番の literal な勝率（1 着率）は evaluate_mc.py
+    が別途集計するので、内部採点を着順スコアにしても出力契約は変わらない。
 
 決定性（CLAUDE.md「Python は標準ライブラリ優先・決定的」）:
   - 乱数は random.Random をローカルに閉じ込め、(seed, 盤面指紋, 手番席, 手 index, sim index) から
@@ -44,7 +53,6 @@ from engine import (
     State,
     Suit,
     _SUIT_LIST,
-    play_game,
 )
 
 ActionFn = Callable[[State], "tuple[Optional[Card], int]"]
@@ -146,8 +154,9 @@ def make_mc_ai(
 ) -> ActionFn:
     """決定化 Monte-Carlo（簡易 PIMC）方策 action_fn(state) を作る。
 
-    各合法手について相手手札を seed 付きでランダム決定化し sim_count 回プレイアウトして勝率を
-    推定し、最良手を選ぶ。プレイアウトの方策は make_ai(params)（決定的ヒューリスティック）。
+    各合法手について相手手札を seed 付きでランダム決定化し sim_count 回プレイアウトして**期待着順
+    スコア**を推定し、最良手を選ぶ。プレイアウトの方策は make_ai(params)（決定的ヒューリスティック）。
+    採点は二値勝率でなく着順スコア（1 着=1.0 / 最下位=0.0）にしている（理由は冒頭 docstring 参照）。
 
     - params: ヒューリスティック係数（make_ai が default_params で補完）。プレイアウト方策に使う。
     - sim_count: 1 手あたりのプレイアウト本数（budget）。大きいほど推定が安定し強くなる想定。
@@ -173,12 +182,13 @@ def make_mc_ai(
 
         board_fp = _board_fingerprint(state)
         playout_fns = [playout_fn] * state.players_num
+        n_players = state.players_num
 
         best_action: Optional[Card] = None
-        best_score = -1.0  # 勝率（0..1）の最大。同点は後の str 昇順で割る。
+        best_score = -1.0  # 期待着順スコア（0..1）の最大。同点は後の str 昇順で割る。
 
         for move_idx, action in enumerate(actions):
-            wins = 0
+            total = 0.0
             for sim_idx in range(n_sims):
                 sim_seed = _derive_seed(
                     base_seed, board_fp, root_seat, move_idx, sim_idx
@@ -186,11 +196,10 @@ def make_mc_ai(
                 det = _determinize(state, root_seat, random.Random(sim_seed))
                 # root が手 action を打った独立盤面。det は非破壊なのでそのまま next できる。
                 after = det.next(action, pass_flag=0)
-                winner = _playout(after, playout_fns)
-                if winner == root_seat:
-                    wins += 1
-            score = wins / n_sims
-            # 最大勝率を選ぶ。同点は actions が str 昇順なので先勝ち＝str 昇順 tie-break。
+                finish = _playout_order(after, playout_fns)
+                total += _rank_score(finish, root_seat, n_players)
+            score = total / n_sims
+            # 期待着順スコア最大を選ぶ。同点は actions が str 昇順なので先勝ち＝str 昇順 tie-break。
             if score > best_score:
                 best_score = score
                 best_action = action
@@ -203,13 +212,37 @@ def make_mc_ai(
     return action_fn
 
 
-def _playout(state: State, action_fns: "list[ActionFn]", max_turns: int = 2000) -> int:
-    """与えた盤面 state を action_fns で最後まで回し、勝者席 index を返す（play_game と同進行）。
+def _rank_score(finish: "list[int]", seat: int, n_players: int) -> float:
+    """着順 finish（finish[0]=1 着席, finish[-1]=最下位席）から seat の着順スコア（0..1）を返す。
 
-    play_game は新規 State を seed から作り直すため「途中盤面からの続行」ができない。PIMC は
-    決定化済みの途中盤面からプレイアウトする必要があるので、ここで同一進行ロジックを途中
-    state 開始で回す（engine.play_game の上がり判定・強制パス・安全弁を踏襲）。
+    1 着=1.0 / 最下位=0.0 を線形按分（n_players 人なら rank r(0始まり) → (n-1-r)/(n-1)）。
+    n_players==1 のときは 1.0（按分不能なので最良扱い）。finish に seat が無い異常時は 0.0。
+    二値勝率より勾配が滑らかで、手の良し悪しが平均スコア差として表れる（sim_count の単調性）。
     """
+    if n_players <= 1:
+        return 1.0
+    try:
+        r = finish.index(seat)
+    except ValueError:
+        return 0.0
+    return (n_players - 1 - r) / (n_players - 1)
+
+
+def _playout_order(
+    state: State, action_fns: "list[ActionFn]", max_turns: int = 2000
+) -> "list[int]":
+    """与えた盤面 state を action_fns で最後まで回し、**着順（finish order）**を返す（play_table と同進行）。
+
+    play_table は新規 State を seed から作り直すため「途中盤面からの続行」ができない。PIMC は
+    決定化済みの途中盤面からプレイアウトする必要があるので、ここで play_table と同一の着順
+    決定ロジックを途中 state 開始で回す（上がり順 → 安全弁未決着は手札少ない順 → 失格順）。
+    返り値は長さ players_num の席 index 配列（finish[0]=1 着, finish[-1]=最下位）。
+    """
+    n = state.players_num
+    finished: list[int] = []  # 上がった順の席 index。
+    busted: list[int] = []    # 失格した順の席 index（最下位群）。
+    seen_out = 0
+
     for _ in range(max_turns):
         current = state.turn_player
         my_actions = state.my_actions()
@@ -223,14 +256,27 @@ def _playout(state: State, action_fns: "list[ActionFn]", max_turns: int = 2000) 
             else:
                 state = state.next(act, pass_flag=0)
 
-        # 今行動した本人が手札 0 かつ非失格＝最初の上がり＝勝者（play_game と同判定）。
-        if len(state.players_cards[current]) == 0 and current not in state.out_player:
-            return current
+        # 新たにバースト失格した席を、失格した順で最下位群に積む（上がり済みは除外）。
+        if len(state.out_player) > seen_out:
+            for p in state.out_player:
+                if p not in busted and p not in finished:
+                    busted.append(p)
+            seen_out = len(state.out_player)
 
-    actives = state.active_players()
-    if not actives:
-        return 0
-    return min(actives, key=lambda p: len(state.players_cards[p]))
+        # 今行動した本人が手札 0 かつ非失格＝上がり。重複なく着順に積む。
+        if (
+            len(state.players_cards[current]) == 0
+            and current not in state.out_player
+            and current not in finished
+        ):
+            finished.append(current)
+
+        if len(finished) + len(busted) >= n:
+            break
+
+    remaining = [p for p in range(n) if p not in finished and p not in busted]
+    remaining.sort(key=lambda p: (len(state.players_cards[p]), p))
+    return finished + remaining + busted
 
 
 def _demo() -> None:
@@ -238,6 +284,7 @@ def _demo() -> None:
     import sys
 
     from ai_param import default_params
+    from engine import play_game
 
     mc = make_mc_ai(default_params(), sim_count=20, seed=0)
     heur = make_ai(default_params(), seed=0)

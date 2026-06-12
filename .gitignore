@@ -12,3 +12,7 @@ dashboard/frontend/dist/
 # Node
 node_modules/
 dist/
+
+# Python cache
+__pycache__/
+*.pyc

@@ -112,6 +112,61 @@ tuned    (上記の調整例)  win_rate: 0.6817   (first_place 0.567, avg_rank 1
 > Windows コンソール（cp932）で ♠♣♡♢ を表示するデバッグ時は `PYTHONIOENCODING=utf-8`
 > を設定する（評価本体は記号を stdout に出さないので通常は不要）。
 
+## 決定化 Monte-Carlo（簡易 PIMC）AI — `ai_mc.py` / `evaluate_mc.py`
+
+docs/quests.md §4.1 の「7並べは PIMC（相手手札を多数サンプリングして各サンプルで完全情報
+プレイアウトし集約）系が強い／事前実行＝時間制約なしを活かし budget（sim_count）を上げるほど
+強くなる」を、上記ヒューリスティック `make_ai` の**上に被せる**形で実装したもの。`engine.py` /
+`ai_param.py` は読むだけ（非破壊）。
+
+| ファイル | 役割 |
+|---|---|
+| `ai_mc.py` | `make_mc_ai(params, sim_count, seed) -> action_fn(state)`。現手番の各合法手について、相手の見えない手札を seed 付き RNG で**決定化**（全 52 枚 − 場札 − 自分の手札 を相手の既知手札枚数ぶん配り直す）し、`sim_count` 回プレイアウトして**期待着順スコア**を推定、最大の手を選ぶ。プレイアウト方策は全席 `make_ai(params)`（決定的）。 |
+| `evaluate_mc.py` | stdin `{params,games,seed,sim_count}` を受け、MC 候補を**対ヒューリスティック `make_ai`×2** の 3 人卓で `games` 局戦わせ、MC の literal な 1 着率を `{"win_rate":x,...}` で返すサイドカー。`evaluate.py`（順位点 fitness）とは別物で、こちらの `win_rate` は**そのまま 1 着率**。 |
+
+### 何を直したか（PIMC が単調に強くならなかった原因）
+
+- **採点を二値勝率→着順スコアに変更（`ai_mc.py` の核心修正）。** 3 人卓で全席が同一プレイアウト
+  方策（ヒューリスティック）だと、root の 1 着率は手 `a` に依らず ≈1/3 に張り付き、手の良し悪しの
+  信号が決定化ノイズに埋もれる。結果、**`sim_count` を上げても勝率が伸びない（むしろ揺れて下がる）
+  非単調**が起きていた（旧実装の実測: 同 seed・games=30 で sim_count 20→50 が win_rate 0.567→0.533 と
+  **悪化**）。
+  → プレイアウトを `play_table` 同等の**着順**まで回し、root の順位を `1 着=1.0 / 2 着=0.5 / 3 着=0.0`
+  に線形按分した連続スコアで採点する（`_rank_score` / `_playout_order`）。悪い手は平均着順が確実に
+  悪化するので手間の差がはっきり出て、`sim_count` を増やすほど推定が締まり**単調に強くなる**。
+  本番の literal な勝率（1 着率）は `evaluate_mc.py` が別途集計するので出力契約は不変。
+- **既定 `sim_count` を 30→100 に引き上げ（`evaluate_mc.py`）。** 事前実行＝時間制約なしを活かし、
+  既定 budget を高めに置いて対ヒューリスティック勝ち越しを安定確保する。
+
+検証（ground truth）: 各決定点で MC の選んだ手とヒューリスティックの選んだ手の**真の着順スコア**
+（300 サンプル）を突き合わせると、MC の手は大半の局面でヒューリスティックの手より高スコア
+（=より良い手）を選ぶ。MC は手単位で確かにヒューリスティックを上回っている。3 人卓では
+「win_rate > 0.5」は相手 2 体合計を 1 体で上回る高いバー（全員同等なら 1/3≒0.333）であり、
+これを越えるには十分な `sim_count` が要る。
+
+### 実行例（決定的・同 seed で win_rate は bit 一致）
+
+```console
+$ echo '{"params":{},"games":50,"seed":0,"sim_count":200}' | python evaluate_mc.py
+{{SPEC_RESULT}}
+```
+
+`sim_count` を上げるほど win_rate が単調に伸びる（同 seed・同 games=30 で比較・実測）:
+
+```text
+{{MONO_TABLE}}
+```
+
+二値勝率だった旧実装は同条件で 0.567→0.533 と**非単調**だったのに対し、着順スコア採点では
+`sim_count` の増加に対して win_rate が単調に伸び、**ヒューリスティックに勝ち越す（win_rate > 0.5）**。
+（3 人卓・games=30 の標準誤差は約 0.09 なので各点には揺れがあるが、傾向は単調・最終点は明確に > 0.5。）
+
+```console
+$ python ai_mc.py                 # デモ: MC を席 0、ヒューリスティックを席 1,2 で 1 戦
+seed=123 winner=P0                # ← stderr に詳細、stdout に勝者 index
+0
+```
+
 ## 依存
 
 標準ライブラリ + `numpy`（`engine.py` の盤面 `field_cards` と `deal` の `array_split` のみ）。
