@@ -1,0 +1,9 @@
+{
+  "name": "toy-impossible",
+  "language": "python",
+  "run_cmd": "python src/main.py",
+  "test_cmd": "python tests/test_impossible.py",
+  "test_source": "provided",
+  "submission": { "format": "zip" },
+  "automation_allowed": true
+}

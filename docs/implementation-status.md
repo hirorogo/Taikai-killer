@@ -18,8 +18,9 @@
 ## 0. 一目でわかる結論
 
 - **縦串MVP（Issue #3）は実通している。** test型（fizzbuzz）と対戦型（janken）の両方が `taikai run` で `result.json` を出した実績が `outputs/` に残る。
-- ただし **runner に配線されているのは S3→S5→S6 の最小経路だけ**。S2 / `resume.ts`/`idempotencyStore.ts` モジュール / archiver / 進化 / Gemini / dashboard は「実装＋テスト緑」だが **runner からは呼ばれていない（未配線）**。なお S3 段の resume だけは runner の inline `loadExistingS3()` で別途動く（§2.1 / AC5）。
-- **LLM 発火に依存する箇所（S3 戦略生成・S5 生成・S5 reflector）は実 run で動いた形跡があるが、ユニットテストでは検証不能**。本書では「動く（実 run 実績あり）」と「未検証（自動テスト外）」を分けて明記する。
+- **Issue #3 の AC は 6/6 全達成（2026-06-13・§4）**。resume（S3＋S5 attempt）・テスト改ざん検知・D22 reflexion・result provenance まで実 run で実証済み。
+- ただし **runner に配線されているのは S3→S5→S6 の最小経路だけ**。S2 / archiver / 進化 / Gemini / dashboard は「実装＋テスト緑」だが **runner からは呼ばれていない（未配線）**（`resume.ts`/`idempotencyStore.ts` は 2026-06-13 に S5 へ配線済＝もう未配線ではない）。
+- **LLM 発火に依存する箇所（S3 戦略生成・S5 生成・S5 reflector）は実 run で実証済み**（reflector は `toy-impossible` で multi-attempt 発火を確認・§3-1）。ただし**ユニットテストでは検証不能**なので「動く（実 run 実績あり）」と「未検証（自動テスト外）」を引き続き分けて明記する。
 - Gemini は `index.ts` に **register 済みだが、どのフェーズも `model:"claude"`** 固定で、**認証未設定なら error.code=41**（runner からは未使用＝実質未検証）。
 - **標準化クエストフレームワーク（`orchestrator/quest/`・§1.6）は別経路で動く。** `taikai quest`/`taikai coevolve` は runner（縦串 MVP）とは独立に CLI 配線済で、LLM 非依存の数値最適化（GA/ヒルクライム）＋自己対戦コオエボリューション（Hall of Fame 込み）を実 spawn で回し、`best_params.json`/`champion_params.json` を生成した実績がある（実測は quests.md §7.5）。MVP 縦串の「S2/進化/Gemini 未配線」とは別レイヤなので混同しない。
 
@@ -135,7 +136,7 @@ D8（SBQ 全分野を狙う標準化フレーム）の実体。`taikai quest`/`t
 
 ### 2.4 縦串に「入っていない」もの（MVP仕様通り）
 
-mvp-vertical-slice.md の原則「無限ループ・S2大量クロール・S4独立・並列・進化・island・2モデル目は入れない」に沿って、runner は **1周だけ・S2/S4スキップ・単一戦略のみ S5 実装**。これは欠陥ではなく**スコープ通り**。ただし下記の AC 未達（resume）は MVP の DoD に含まれており、別問題（§4 参照）。
+mvp-vertical-slice.md の原則「無限ループ・S2大量クロール・S4独立・並列・進化・island・2モデル目は入れない」に沿って、runner は **1周だけ・S2/S4スキップ・単一戦略のみ S5 実装**。これは欠陥ではなく**スコープ通り**。MVP の DoD に含まれていた resume（AC5）は 2026-06-13 に S3＋S5 attempt 段とも充足済み（§4）。
 
 ---
 
@@ -143,7 +144,7 @@ mvp-vertical-slice.md の原則「無限ループ・S2大量クロール・S4独
 
 レビューが疑う「動くと言いつつ動かない」を先回りで列挙する。
 
-1. **S5 reflector の LLM 発火（D22 既定=LLM）**: `runner.ts:reflect()` は実装済みで実 run 経路にあるが、**ユニットテストは無い**。`TAIKAI_REFLECTOR=template` で LLM 省略にできる。fizzbuzz は 1 attempt で PASS したため、**reflector が実際に発火した証跡（複数 attempt の feedbackHistory）は `outputs/` に残っていない**＝reflector 実発火は**未検証**。
+1. **S5 reflector の LLM 発火（D22 既定=LLM）**: `runner.ts:reflect()` は実装済み。**実発火を実 run で確認済み（2026-06-13）**: `examples/toy-impossible` で attempt 1→2→3 の各失敗後に reflector が発火し、`[S5] reflect:` の改善指示が出た（reflector は仕様の充足不能性まで正しく診断）。`TAIKAI_REFLECTOR=template` で LLM 省略可。ユニットテストは無い（LLM 依存のため実 run 証跡で代替）。
 2. **geminiRunner 認証未設定**: `index.ts` で register 済みだが全フェーズ `model:"claude"`。`GEMINI_API_KEY`/`GOOGLE_GENAI_USE_GCA` 未設定だと error.code=41。`checkAvailable` は `--version` のみで認証を見ない。**実 LLM 応答は未検証**。
 3. **S2 が runner 未配線**（resume/idempotency は **解消（2026-06-13）**）: `s2.ts`/`crawl.ts` は依然 runner 未配線（MVP スコープ通り）。一方 **`resume.ts`/`idempotencyStore.ts` は runner に配線済**になった: S3 段は inline `loadExistingS3()`、**S5 attempt 段は `IdempotencyStore.loadFromRun` で完了 attempt をスキップ**（AC5 達成・実 run 実証）。残る未配線は S2 クロールのみ。
 4. **archiver / crawl サイドカー実 spawn**: archiver は未配線。crawl は s2 経由のみで、Python サイドカー（`crawl-py/crawl.py`）の実 spawn は自動テストでモック化されており**実プロセス未検証**。
@@ -160,13 +161,13 @@ mvp-vertical-slice.md の原則「無限ループ・S2大量クロール・S4独
 | # | AC | 判定 | 根拠 |
 |---|---|---|---|
 | AC1 | `python3`＋`claude` CLI 環境で `taikai run` 一発で `result.json` が出る | 達成 | `outputs/dev-run/result.json`・`fbp-run` が実在。経路は runner.runSlice |
-| AC2 | わざと通らない仕様にすると D22 ループが3回試行し reflector feedback を feedbackHistory に残す | 部分（前進） | maxAttempts=3 ループ・reflect()・feedbackHistory.push は実装済み。**feedbackHistory は CodegenResult として `S5R` partial に永続化されるようになった（2026-06-13・§3-6 解消・実 run で確認）**。残るは**失敗注入での複数 attempt reflector 実発火の証跡**（成功 toy では 1 attempt なので multi-attempt 系列が未収集） |
+| AC2 | わざと通らない仕様にすると D22 ループが3回試行し reflector feedback を feedbackHistory に残す | **達成（2026-06-13）** | `examples/toy-impossible`（同一入力に矛盾する2正解を要求＝充足不能の provided テスト）で実 run 実証: `[S5] attempt 1/2/3: FAIL`＋各失敗で `[S5] reflect:` が発火。`S5R` partial に `attempts:3`・`feedbackHistory:["attempt 1: FAIL","attempt 2: FAIL","attempt 3: FAIL"]`・`passed:false`・`finalFeedback`（reflector が「仕様自体が充足不能」と正しく診断）を永続化。result は best-so-far ratio=0.667 |
 | AC3 | `tests/` を改変すると S6 が E_TEST_TAMPER で失格 | **達成（2026-06-13）** | `hashDir(projTests)` を S5開始時に凍結→S6で再ハッシュ→不一致で `E_TEST_TAMPER`+notify+exit 1。**故障注入 `TAIKAI_TAMPER_INJECT=1`（既定 off）で実 run 実証**: `[S6] E_TEST_TAMPER: テストが改変された → 失格`／`notify.jsonl` に `{"type":"E_TEST_TAMPER","strategy":"S3-001"}`／**exit 1**／result.json 未生成（採点せず失格）を確認 |
 | AC4 | TOURNAMENT_INFO 必須欠落で S1 が exit 1＋通知 | 達成 | `doctor()` が必須6フィールド検査→欠落で `E_S1_INPUT` notify→exit 1 |
 | AC5 | 途中で殺して再実行すると partial から resume（同 attempt を二重実行しない） | **達成（2026-06-13）** | S3 段は inline `loadExistingS3()` で既存戦略を再利用。**S5 attempt 段も `IdempotencyStore.loadFromRun(runDir,"S5")`（resume.ts→idempotencyStore.ts を配線）で完了済み attempt をスキップ**。実 run で実証: attempt 1 を FAIL 記録のまま再起動→`[S5] attempt 1: resume skip（冪等hit, FAIL）` で **LLM 再生成せず**、`[S5] attempt 2: PASS` で続行。S5R partial が `feedbackHistory:["attempt 1: FAIL（resume・LLM再生成スキップ）","attempt 2: PASS"]` を記録。冪等hit は `cb.recordSkip("idempotent_hit")`＝失敗に加算しない（D10/D11） |
 | AC6 | result.json から provenance.derived_from で戦略→要件→ルールまで遡れる | **達成（2026-06-13）** | result.json に `provenance{produced_by:"S6", derived_from:[strategy_id], source_ref:rubric_ref}` を載せた（型＋schema＋runner 2 箇所）。実 run（toy-fizzbuzz）で result→`S3-fizzbuzz-modulo`（戦略 partial の derived_from=`["rubric:toy-fizzbuzz-rules"]`）→ rubric の鎖が **result 単体から辿れる**ことを確認済み |
 
-**サマリ**: 6項目中、**完全達成5（AC1, AC3, AC4, AC5, AC6）**、**部分1（AC2）**。（2026-06-13: AC3 を `TAIKAI_TAMPER_INJECT` 故障注入で実 run 実証して達成、AC5 を `IdempotencyStore` 配線で達成、AC6 を result provenance で達成。残る AC2 は失敗注入での multi-attempt reflector 系列の実 run 証跡のみ＝reflector が複数回発火する toy が要る。）
+**サマリ**: 6項目中、**完全達成6（AC1〜AC6 全て）**。（2026-06-13 に AC2/AC3/AC5/AC6 を実 run 実証で達成: AC2=`toy-impossible` で 3-attempt D22 系列、AC3=`TAIKAI_TAMPER_INJECT` 故障注入で E_TEST_TAMPER、AC5=`IdempotencyStore` で attempt resume、AC6=result provenance。Issue #3 の AC は全て充足。残る課題は AC の外＝D5 cost_tracker・回帰ガード passed_anchor_ids 実値化・S2/gemini 配線など §6/§5 の乖離項目。）
 
 ---
 
