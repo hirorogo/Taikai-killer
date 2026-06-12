@@ -403,25 +403,25 @@ npm run taikai -- coevolve --quest xq [--seed N] [--generations N] [--promote-ma
 
 ### 7.5 現状の限界（正直に）と実測の枠
 
-コオエボリューションは原理として有望だが、**現時点で本ハーネスでは未実証**である。誇張せず限界を明記する。
+コオエボリューションは**実装・実走済み**（`taikai coevolve --quest xq`、§7.3 配線済み）。ただし**短い run では固定 fitness を明確には超えない**（実測は下表）。誇張せず限界を明記する。
 
 1. **相手が `ai_param` ベースで本番の未知 AI ではない**: self-play coevolution のチャンピオンは結局 `ai_param.py` の 8 係数ヒューリスティック方策である（`make_ai` の係数を変えるだけで、方策の表現力自体は固定）。**本番で同卓する相手の強さ・方策は未知**（§4.3(4-3)）で、`ai_param` 空間内で軍拡競争して強くなっても、その強さが**表現力の天井（8 係数ヒューリスティックで表せる範囲）**を超えることはない。PIMC（§4.2）のような探索ベース方策を相手/候補にできれば天井は上がるが、`ai_mc.py` は未配線で勝ち越し未確立（§4.2）。
 2. **計算量が大きい**: 固定 fitness は 1 候補あたり games 局（既定 100）で済むが、coevolution は **昇格判定のたびに「挑戦者 × チャンピオン（＋アーカイブ）」の対戦**が要り、世代×個体×アーカイブ数ぶん対戦数が乗算で増える。§4.3(4-2) の通り 7並べ 1 局の採点は分オーダーになりうるので、対戦数の爆発は実時間で効く。事前実行＝時間制約なし（§4.1）とはいえ、固定 fitness より桁で重い。
 3. **退行・循環のリスク**（§7.2 注）: 軍拡競争は自動で単調改善しない。忘却・循環・共謀的退化を緩和する仕組み（アーカイブ／マージン／最小対戦数）が効くかは実装して初めて分かる。
-4. **未配線**: §7.3 のコマンド・ループは未実装。現状 `taikai` で実際に回せるのは固定 fitness の `quest` のみ。
+4. **配線済み**: `taikai coevolve --quest xq`（index.ts switch にあり）。固定 fitness の `quest` と並ぶ実走コマンド。
 
-**実測の枠（実装後に埋める。現時点は空欄＝未測定）**:
+**実測（champion_params.json を固定ベンチで再採点。run: rounds=5/popSize=6/generations=3/games=40/seed=42 → 昇格4回）**:
 
-| 指標 | 固定 fitness（実測・§4.3） | coevolution（未測定・実装後に記入） |
+| 指標 | 固定 fitness 既定 params（§4.3） | coevolution champion（実測） |
 |---|---|---|
-| 対 random win_rate（games=100・seed=0・現物再採点） | initial 0.635 → best 0.750 | （未測定） |
-| 対 medium win_rate（games=300・seed=0） | 既定 params 0.48（拮抗どまり・§4.3(4-1)） | （未測定） |
-| 最終チャンピオンの対 medium 勝率 | —（coevolution 専用指標） | （未測定） |
-| 昇格回数 / 総世代 | — | （未測定） |
-| 退行（旧チャンピオンへの負け越し）有無 | — | （未測定） |
-| 1 run あたり総対戦局数（計算量） | games×評価回数 | （未測定・固定 fitness より桁で多い見込み） |
+| 対 random win_rate（games=300・seed=0・現物再採点） | 0.752 | **0.763**（わずかに上） |
+| 対 medium win_rate（games=300・seed=0） | 0.480 | **0.458**（わずかに下） |
+| 昇格回数 / 総 round | — | 4 / 5 |
+| trajectory（昇格時の対旧champion勝率） | — | 0.600→0.537→0.550→0.500→0.575（健全な軍拡＝僅差で上回り続ける） |
+| 退行（intransitivity）有無 | — | **有**（random に強く medium に弱い＝相手に依存した drift） |
 
-> 実装後、§4.3 と同じ流儀で **現物 `best_params.json`（または champion 系列）を固定 seed/games で再採点した値**を正とし、第三者が bit 一致再現できる再現コマンドを併記する。**「coevolution が固定 fitness を超えた」は、この表が埋まり対 medium 等の独立指標で上回りが確認できるまで主張しない。**
+> **正直な結論**: 短い coevolution run（小 budget）では、強化済み既定 params と**概ね同等**で、明確な上回りはない。むしろ軽い intransitivity（対 random↑/対 medium↓）が出ており、§7.2 の「忘却・循環」の典型。**「coevolution が固定 fitness を超えた」とはまだ言えない。**
+> **堅実な改善の道**: (a) 事前実行＝時間制約なし（§4.1）を活かし rounds/popSize/games を大幅増、(b) **対戦相手アーカイブ（Hall of Fame）** を導入して最新 champion だけでなく過去世代も相手プールに残し drift/忘却を防ぐ（coevolution の定石）。これが次の具体的改善点。
 
 ---
 
