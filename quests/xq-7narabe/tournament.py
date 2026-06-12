@@ -39,14 +39,19 @@ from engine import play_table, random_action_fn
 AIFactory = Callable[[int], "Callable"]
 
 
-def _load_champion() -> dict:
-    """champion_params.json を読む（無ければ default にフォールバック）。"""
-    path = os.path.join(os.path.dirname(__file__), "champion_params.json")
+def _load_params(filename: str) -> "dict | None":
+    """quests/xq-7narabe/<filename> を読む（無ければ None）。"""
+    path = os.path.join(os.path.dirname(__file__), filename)
     try:
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception:  # noqa: BLE001
-        return default_params()
+        return None
+
+
+def _load_champion() -> dict:
+    """champion_params.json を読む（無ければ default にフォールバック）。"""
+    return _load_params("champion_params.json") or default_params()
 
 
 def build_pool(mc_sim: int) -> "list[tuple[str, AIFactory]]":
@@ -60,6 +65,10 @@ def build_pool(mc_sim: int) -> "list[tuple[str, AIFactory]]":
         ("heuristic", lambda s: make_ai(default_params(), seed=s)),
         ("champion", lambda s: make_ai(champ, seed=s)),
     ]
+    # 混合フィールド最適化の champion があれば加える（§7.6 仮説の検証用）。
+    mixed = _load_params("mixed_champion_params.json")
+    if mixed is not None:
+        pool.append(("mixed_champ", lambda s: make_ai(mixed, seed=s)))
     if mc_sim > 0:
         pool.append((f"mc(sim={mc_sim})", lambda s: make_mc_ai(default_params(), sim_count=mc_sim, seed=s)))
     return pool

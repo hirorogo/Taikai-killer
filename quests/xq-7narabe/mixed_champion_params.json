@@ -1,0 +1,10 @@
+{
+  "w_edge_distance": 0.8317812259064084,
+  "w_blocking": 1.5475551851469944,
+  "w_rank_extreme": 0.4534497753066935,
+  "w_hold_seven_adj": 0.7199139353311905,
+  "w_suit_balance": 2.755934910373275,
+  "w_pass_reserve": 1.5591594936856485,
+  "w_release_urgency": 1.481764199544251,
+  "w_random_jitter": 0.4453489148482714
+}

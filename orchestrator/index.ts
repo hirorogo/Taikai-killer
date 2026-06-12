@@ -147,6 +147,10 @@ async function main(): Promise<void> {
       } else if (which === "data") {
         adapter = (await import("./quest/dataInsightAdapter.ts")).dataInsightAdapter;
         subDir = "quests/data-insight";
+      } else if (which === "xq-mixed") {
+        // 混合フィールド最適化（§7.6 intransitivity 対策）: random/medium/heuristic 混在卓で最大化。
+        adapter = (await import("./quest/xqMixedAdapter.ts")).xqMixedAdapter;
+        subDir = "quests/xq-7narabe";
       } else {
         adapter = (await import("./quest/xqAdapter.ts")).xqAdapter;
         subDir = "quests/xq-7narabe";
@@ -176,7 +180,7 @@ async function main(): Promise<void> {
       break;
     }
     default:
-      console.error("usage: taikai <probe|probe-gemini|run|doctor|status|evolve|experiment|quest|coevolve|loop> [--run-dir <path>] [--quest xq|ai|robo|data] [--ga N] [--rounds N] [--popSize N] [--games N] [--archiveSize N] [--max-rounds N] [--patience N] [--generations N] [--topK N] [--seed N]");
+      console.error("usage: taikai <probe|probe-gemini|run|doctor|status|evolve|experiment|quest|coevolve|loop> [--run-dir <path>] [--quest xq|xq-mixed|ai|robo|data] [--ga N] [--rounds N] [--popSize N] [--games N] [--archiveSize N] [--max-rounds N] [--patience N] [--generations N] [--topK N] [--seed N]");
       process.exit(2);
   }
 }

@@ -467,6 +467,33 @@ vs random / vs medium の **1 対 1 ベンチ**は相手依存で intransitivity
 > 「**champion < heuristic**」。
 > **決定性**: 同一引数の 2 回 run が bit 一致を確認（`tournament.py` は seed 派生で完全再現）。
 
+### 7.7 混合フィールド最適化で intransitivity を直す（§7.6 の処方を実装・検証）
+
+§7.6 の診断「自己対戦過適合で champion < heuristic」への処方を実装した: **trainer の相手分布を本番に
+近づける**＝候補を **random/medium/heuristic が混ざる卓**で評価する `evaluate_mixed.py`（順位点 fitness）
+＋ それを最大化する `xqMixedAdapter`（既存 numericOptimizer/populationGA を再利用＝車輪の再発明なし）。
+`taikai quest --quest xq-mixed --ga 8 --generations 6` で `mixed_champion_params.json` を生成。
+
+**最適化（GA pop=8 / gen=6 / 強い既定から開始）**: 混合 fitness 0.590（=既定 heuristic）→ **0.600**（改善）。
+
+**独立検証（総当たり 5 体・各 1800 局・MC 除外・seed=0）**:
+
+| 順位 | AI | rank_score | first_rate |
+|---|---|---|---|
+| 1 | **mixed_champ（混合最適化）** | **0.541** | 0.371 |
+| 2 | medium | 0.540 | 0.385 |
+| 3 | heuristic（既定） | 0.529 | 0.376 |
+| 4 | champion（自己対戦） | 0.528 | 0.387 |
+| 5 | random | 0.362 | 0.148 |
+
+> **結論（誇張せず）**: 混合最適化 champion は混合卓で **首位**（0.541）で、**heuristic を上回る**（0.529）。
+> §7.6 で heuristic に負けていた**自己対戦 champion（0.528）も上回る**＝**intransitivity（自己対戦過適合に
+> よる本番後退）が直った**のが構造的な勝ち。ただし **margin は小さい**（medium 0.540 とは誤差内、heuristic
+> とは +0.012）ので「大きく強くなった」とは言わない。**処方が効くことの実証**であり、budget（games/gen/
+> pop/相手プールに過去 champion も常設）を増やせば伸びしろがある、が正直な現在地。
+> **競技への含意（更新）**: §7.6 の「champion より既定が安全」は **mixed_champ で解消**——本番に出すなら
+> 自己対戦 champion でなく **mixed_champ**（または heuristic）が妥当。trainer の相手分布 = 本番分布、が要。
+
 ---
 
 ## 関連
