@@ -131,8 +131,12 @@ gemini を MCP サーバ化する唯一の手段はコミュニティ製ラッ�
 
 - `GEMINI_AUTH_ENV_VARS` — 41 メッセージが列挙する3 env を定数化。
 - `hasAuthEnv(env)` — 認証 env が1つでも与えられているか（空/空白は未設定扱い）。
+- `hasOAuthCreds(home?)` — **対話 OAuth ログイン済みか**（`~/.gemini/oauth_creds.json` の存在）。本プロジェクトの想定経路（CLAUDE.md「サブスク認証をそのまま利用」）は env でなくこのファイルなので、env だけ見ると OAuth 済みユーザを誤って「未認証」と判定してしまう。（2026-06-13 追加）
+- `isAuthReady(env, home?)` — `hasAuthEnv || hasOAuthCreds`。auth レディネスの正本（env 認証 **または** OAuth ファイル）。`checkAvailable` はこれを使う。
 - `isAuthError(raw)` — gemini 出力（JSON `error.code=41` / 素テキスト）が認証未設定エラーかを判定。MCP/ACP ラッパ越しでも 41 が表面化するため、診断メッセージを一意化する用途。
-- `geminiMcp.checkAvailable()` — `gemini --version` の存在確認に加え、認証 env レディネスも報告（未認証なら MCP 経路でも詰まる事実を先に可視化）。
+- `geminiMcp.checkAvailable()` — `gemini --version` の存在確認に加え、`isAuthReady`（env または OAuth）も報告（未認証なら MCP 経路でも詰まる事実を先に可視化）。
+
+> **Windows spawn 注記（2026-06-13）**: `geminiRunner` / `geminiMcp` とも `shell:true` をやめ `cmd.exe /c gemini …args` に変更した。`shell:true` は空文字引数 `-p ""` を連結時に落とし「Not enough arguments following: p」になり、gemini が**全く発火していなかった**（認証以前の問題）。修正後は認証段（`error.code=41`）まで到達することを実機確認。`taikai probe-gemini` で検証可能。
 
 ---
 

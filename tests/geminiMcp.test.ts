@@ -1,8 +1,14 @@
 import { describe, it, expect } from "vitest";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   GEMINI_AUTH_ENV_VARS,
   hasAuthEnv,
+  hasOAuthCreds,
+  isAuthReady,
   isAuthError,
+  OAUTH_CREDS_REL,
 } from "../orchestrator/runtimes/geminiMcp.ts";
 
 describe("geminiMcp.GEMINI_AUTH_ENV_VARS", () => {
@@ -33,6 +39,57 @@ describe("geminiMcp.hasAuthEnv", () => {
 
   it("無関係な env では false（誤検知しない）", () => {
     expect(hasAuthEnv({ PATH: "/usr/bin", HOME: "/home/x" })).toBe(false);
+  });
+});
+
+describe("geminiMcp.hasOAuthCreds / isAuthReady（OAuth ログイン経路）", () => {
+  it("~/.gemini/oauth_creds.json が無ければ hasOAuthCreds=false", () => {
+    const home = mkdtempSync(join(tmpdir(), "gem-home-"));
+    try {
+      expect(hasOAuthCreds(home)).toBe(false);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("oauth_creds.json があれば hasOAuthCreds=true（OAuth 済み）", () => {
+    const home = mkdtempSync(join(tmpdir(), "gem-home-"));
+    try {
+      mkdirSync(join(home, ".gemini"), { recursive: true });
+      writeFileSync(join(home, OAUTH_CREDS_REL), "{}");
+      expect(hasOAuthCreds(home)).toBe(true);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("isAuthReady: env 未設定でも OAuth 済みなら true（誤「未認証」を出さない）", () => {
+    const home = mkdtempSync(join(tmpdir(), "gem-home-"));
+    try {
+      mkdirSync(join(home, ".gemini"), { recursive: true });
+      writeFileSync(join(home, OAUTH_CREDS_REL), "{}");
+      expect(isAuthReady({}, home)).toBe(true);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("isAuthReady: OAuth 無しでも env 認証があれば true", () => {
+    const home = mkdtempSync(join(tmpdir(), "gem-home-"));
+    try {
+      expect(isAuthReady({ GEMINI_API_KEY: "k" }, home)).toBe(true);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("isAuthReady: env も OAuth も無ければ false", () => {
+    const home = mkdtempSync(join(tmpdir(), "gem-home-"));
+    try {
+      expect(isAuthReady({}, home)).toBe(false);
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 });
 

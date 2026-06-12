@@ -26,9 +26,15 @@
  * 認証レディネスを診断するに留める（実 dispatch は将来ラッパが安定したら追加）。
  */
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
 import type { GenerateInput, GenerateOutput, Runtime } from "../runtimeRegistry.ts";
 
 const IS_WIN = process.platform === "win32";
+
+/** 対話 OAuth ログインが作る資格情報ファイルの home からの相対パス（docs/gemini-mcp.md の正規経路）。 */
+export const OAUTH_CREDS_REL = join(".gemini", "oauth_creds.json");
 
 /** checkAvailable 用の軽量 timeout（claudeRunner/geminiRunner と同値）。 */
 const VERSION_TIMEOUT_MS = 15_000;
@@ -53,6 +59,24 @@ export function hasAuthEnv(env: NodeJS.ProcessEnv): boolean {
 }
 
 /**
+ * 対話 OAuth ログイン済みか（`~/.gemini/oauth_creds.json` の存在）。純ロジック・テスト可能。
+ * これが本プロジェクトの想定経路（CLAUDE.md「サブスク認証をそのまま利用」/ docs/gemini-mcp.md）。
+ * env 認証とは独立に成立するため、auth レディネス判定は env と OR で見る必要がある。
+ * @param home 探索の起点（既定 os.homedir()）。テストで差し替え可能。
+ */
+export function hasOAuthCreds(home: string = homedir()): boolean {
+  return existsSync(join(home, OAUTH_CREDS_REL));
+}
+
+/**
+ * gemini が認証レディか（env 認証 **または** OAuth 資格情報ファイル）。純ロジック・テスト可能。
+ * hasAuthEnv だけだと OAuth ログイン済みユーザを誤って「未認証」と判定する（env は空のため）。
+ */
+export function isAuthReady(env: NodeJS.ProcessEnv, home: string = homedir()): boolean {
+  return hasAuthEnv(env) || hasOAuthCreds(home);
+}
+
+/**
  * gemini CLI の出力/stderr が「認証未設定（code=41）」かを判定（純ロジック・テスト可能）。
  * JSON（`{ error: { code: 41 } }`）と素テキストの両方を見る。MCP/ACP ラッパ越しでも
  * 最終的にこの 41 が表面化するため、診断メッセージを一意化する。
@@ -71,10 +95,10 @@ export function isAuthError(raw: string): boolean {
 
 function spawnGemini(args: string[], stdin: string, timeoutMs: number): Promise<GenerateOutput> {
   return new Promise<GenerateOutput>((resolve, reject) => {
-    const child = spawn("gemini", args, {
-      shell: IS_WIN, // Windows は gemini.cmd を PATH から解決させる
-      windowsHide: true,
-    });
+    // Windows は gemini.cmd。空引数を落とさないよう cmd.exe /c 経由で起動（geminiRunner と同方針）。
+    const child = IS_WIN
+      ? spawn("cmd.exe", ["/c", "gemini", ...args], { windowsHide: true })
+      : spawn("gemini", args, { windowsHide: true });
 
     let stdout = "";
     let stderr = "";
@@ -151,12 +175,12 @@ export const geminiMcp = {
       if (out.exitCode !== 0) {
         return { ok: false, hint: `gemini --version exit ${out.exitCode}` };
       }
-      if (!hasAuthEnv(process.env)) {
+      if (!isAuthReady(process.env)) {
         return {
           ok: false,
           hint:
-            "gemini CLI は存在するが認証 env 未設定（GEMINI_API_KEY / GOOGLE_GENAI_USE_VERTEXAI /" +
-            " GOOGLE_GENAI_USE_GCA のいずれか、または対話 OAuth ログインが必要）。" +
+            "gemini CLI は存在するが未認証（GEMINI_API_KEY / GOOGLE_GENAI_USE_VERTEXAI /" +
+            " GOOGLE_GENAI_USE_GCA のいずれか、または対話 OAuth ログイン=~/.gemini/oauth_creds.json が必要）。" +
             " MCP/ACP 経路でもこの認証は解決しない。docs/gemini-mcp.md 参照。",
         };
       }
