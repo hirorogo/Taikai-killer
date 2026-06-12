@@ -21,7 +21,7 @@
 - **Issue #3 の AC は 6/6 全達成（2026-06-13・§4）**。resume（S3＋S5 attempt）・テスト改ざん検知・D22 reflexion・result provenance まで実 run で実証済み。
 - ただし **runner に配線されているのは S3→S5→S6 の最小経路だけ**。S2 / archiver / 進化 / Gemini / dashboard は「実装＋テスト緑」だが **runner からは呼ばれていない（未配線）**（`resume.ts`/`idempotencyStore.ts` は 2026-06-13 に S5 へ配線済＝もう未配線ではない）。
 - **LLM 発火に依存する箇所（S3 戦略生成・S5 生成・S5 reflector）は実 run で実証済み**（reflector は `toy-impossible` で multi-attempt 発火を確認・§3-1）。ただし**ユニットテストでは検証不能**なので「動く（実 run 実績あり）」と「未検証（自動テスト外）」を引き続き分けて明記する。
-- Gemini は `index.ts` に **register 済みだが、どのフェーズも `model:"claude"`** 固定で、**認証未設定なら error.code=41**（runner からは未使用＝実質未検証）。
+- Gemini は `index.ts` に **register 済み**。**2026-06-13 に Windows spawn バグを修正**（`shell:true` が空引数 `-p ""` を落とし「Not enough arguments」で**実は全く発火していなかった**→ `cmd.exe /c` 方式に変更し認証段（error.code=41）まで到達を確認）。`taikai probe-gemini` で検証可能。残るは**ユーザが認証（`GOOGLE_GENAI_USE_GCA` 等）を設定**すれば実生成が動く状態（どのフェーズも既定 `model:"claude"` なのは据え置き）。
 - **標準化クエストフレームワーク（`orchestrator/quest/`・§1.6）は別経路で動く。** `taikai quest`/`taikai coevolve` は runner（縦串 MVP）とは独立に CLI 配線済で、LLM 非依存の数値最適化（GA/ヒルクライム）＋自己対戦コオエボリューション（Hall of Fame 込み）を実 spawn で回し、`best_params.json`/`champion_params.json` を生成した実績がある（実測は quests.md §7.5）。MVP 縦串の「S2/進化/Gemini 未配線」とは別レイヤなので混同しない。
 
 ---
@@ -34,7 +34,7 @@
 
 | ファイル | 役割 | テスト | runner配線 | 状態 |
 |---|---|---|---|---|
-| `orchestrator/index.ts` | CLI エントリ（probe/run/doctor）。claude+gemini を register | なし | — | 動く（probe/run/doctor 実行可） |
+| `orchestrator/index.ts` | CLI エントリ（probe/probe-gemini/run/doctor/quest/coevolve/loop…）。claude+gemini を register | なし | — | 動く（probe/probe-gemini/run/doctor/quest/coevolve 実行可） |
 | `orchestrator/runner.ts` | 縦串本体 S3→S5→S6＋battle 分岐 | なし（実 run で実証） | 本体 | 動く |
 | `orchestrator/config.ts` | PhaseConfig / CB しきい値 / MVP_PHASES | なし | 済 | 動く |
 | `orchestrator/types.ts` | フェーズ間データ契約（TS型） | （schemas で間接） | 済 | 動く |
@@ -67,7 +67,7 @@
 | `orchestrator/idempotency.ts` | 冪等キー生成（D10） | `idempotency.test.ts`(11) | 未 | テストのみ・未配線 |
 | `orchestrator/idempotencyStore.ts` | 冪等マーカー集合（D10×D9） | `idempotencyStore.test.ts`(13) | 未 | テストのみ・未配線（resume と組で AC「二重実行しない」未達） |
 | `orchestrator/archiver.ts` | run アーカイブ（zstd tarball / steal E-6） | `archiver.test.ts`(9) | 未 | テストのみ・未配線 |
-| `orchestrator/runtimes/geminiRunner.ts` | gemini CLI driver（D4 2モデル目） | `geminiRunner.test.ts`(10 純ロジック) | register済/未使用 | テストのみ。**認証未設定（GEMINI_API_KEY 等）→ error.code=41。実発火未検証** |
+| `orchestrator/runtimes/geminiRunner.ts` | gemini CLI driver（D4 2モデル目） | `geminiRunner.test.ts`(14 純ロジック) | register済・`probe-gemini` 配線 | **Windows spawn 修正済（2026-06-13）**: `cmd.exe /c gemini …args` で空引数を保ち**認証段（code=41）まで到達を実機確認**。`parseGeminiError` で error.code を診断に surface。実生成はユーザ認証設定後に動く（auth 未設定のため最終応答のみ未検証） |
 | `orchestrator/runtimes/geminiMcp.ts` | gemini MCP 連携の知見 | `geminiMcp.test.ts`(11) | 未 | テストのみ・未配線 |
 
 ### 1.4 進化トラック（D18①）— 実証デモ・本番未配線
@@ -145,7 +145,7 @@ mvp-vertical-slice.md の原則「無限ループ・S2大量クロール・S4独
 レビューが疑う「動くと言いつつ動かない」を先回りで列挙する。
 
 1. **S5 reflector の LLM 発火（D22 既定=LLM）**: `runner.ts:reflect()` は実装済み。**実発火を実 run で確認済み（2026-06-13）**: `examples/toy-impossible` で attempt 1→2→3 の各失敗後に reflector が発火し、`[S5] reflect:` の改善指示が出た（reflector は仕様の充足不能性まで正しく診断）。`TAIKAI_REFLECTOR=template` で LLM 省略可。ユニットテストは無い（LLM 依存のため実 run 証跡で代替）。
-2. **geminiRunner 認証未設定**: `index.ts` で register 済みだが全フェーズ `model:"claude"`。`GEMINI_API_KEY`/`GOOGLE_GENAI_USE_GCA` 未設定だと error.code=41。`checkAvailable` は `--version` のみで認証を見ない。**実 LLM 応答は未検証**。
+2. **geminiRunner: 認証設定後に実生成**（Windows spawn バグは 2026-06-13 修正済）: `cmd.exe /c gemini …args` 方式で**引数解釈は正しくなり認証段（error.code=41）まで到達を実機確認**。全フェーズ既定 `model:"claude"` は据え置き。`GEMINI_API_KEY`/`GOOGLE_GENAI_USE_GCA` 未設定だと code=41（`taikai probe-gemini` が明示）。`checkAvailable` は `--version` のみで認証を見ない。**最終 LLM 応答だけはユーザ認証が要るため未検証**（プラミングは検証済）。
 3. **S2 が runner 未配線**（resume/idempotency は **解消（2026-06-13）**）: `s2.ts`/`crawl.ts` は依然 runner 未配線（MVP スコープ通り）。一方 **`resume.ts`/`idempotencyStore.ts` は runner に配線済**になった: S3 段は inline `loadExistingS3()`、**S5 attempt 段は `IdempotencyStore.loadFromRun` で完了 attempt をスキップ**（AC5 達成・実 run 実証）。残る未配線は S2 クロールのみ。
 4. **archiver / crawl サイドカー実 spawn**: archiver は未配線。crawl は s2 経由のみで、Python サイドカー（`crawl-py/crawl.py`）の実 spawn は自動テストでモック化されており**実プロセス未検証**。
 5. **進化ループ（D18）本番未起動**: jankenEvolve/evolveDemo はデモ。decisions.md「評価器D3確定まで起動しない」に従い**意図的に未配線**（設計通りだが「動く進化」ではない）。
@@ -177,7 +177,7 @@ mvp-vertical-slice.md の原則「無限ループ・S2大量クロール・S4独
 |---|---|---|---|
 | D2 JSON契約 | schemas/ に JSON Schema 実体＋検証必須 | `schemas/*.schema.json`(実10種: BenchResult/CodeAttempt/CodegenResult/LeaderboardEntry/PhaseArtifact/ProjectManifest/Provenance/ScoringRubric/Strategy/TournamentInfo)＋`schemas.ts`(ajv)＋`validate.ts`。selfcheck 緑 | **一致**。器も中身も実装済み（RunManifest/各Event/各Partial は未作成＝設計上の理想形） |
 | D3 評価器 | S1 が SCORING_RUBRIC 導出、S6 は2モード(test/battle) | test型(`runner` parsePytestRatio)・battle型(`s6battle`) 両方動く。ただし SCORING_RUBRIC は**手書き**（S1 LLM 導出は未実装、doctor が存在検査するのみ） | **一部乖離**: rubric の S1 自動導出は未実装（MVP は手書き＝欠落4の主経路通り） |
-| D4 CLI抽象 | Claude+Gemini を CLI subprocess、機械可読、ハードtimeout、フォールバック順 | runtimeRegistry＋claude/gemini runner 実装。timeout あり。**フォールバック順/OutcomeTracker/AGENT_HEALTH.json は未実装** | **乖離**: 2モデル目未使用、フォールバック未実装 |
+| D4 CLI抽象 | Claude+Gemini を CLI subprocess、機械可読、ハードtimeout、フォールバック順 | runtimeRegistry＋claude/gemini runner 実装。timeout あり。**gemini は Windows spawn 修正で実発火可能になった（2026-06-13・認証段まで実機確認・`probe-gemini`）**。**フォールバック順/OutcomeTracker/AGENT_HEALTH.json は未実装** | **一部乖離**: gemini は配線・実発火可（認証はユーザ設定）だが、フェーズ別 model 切替の実運用とフォールバック順は未実装 |
 | D5 コスト | デフォルト無制限、budget_usd 指定時のみ exit 64、cost_tracker 常時追跡 | **cost_tracker 未実装**。budget チェックも runner に無し | **乖離**: コスト追跡・上限ともに未実装（無制限のみ） |
 | D7 S2クロール | 最大4回＋新規率<10%収束、サイドカー | `s2.ts`(収束判定/INDEX)＋`crawl.ts` 実装・テスト緑。だが**runner 未配線**＋サイドカー実 spawn 未検証 | **乖離**: 実装あるが未配線・未検証 |
 | D9 状態モデル | partial=resume の唯一真実源、event は write-only | `resume.ts`(glob)＋`events.ts`(write-only) 実装・テスト緑・runner 配線済。S3 は inline `loadExistingS3()`、**S5 は `IdempotencyStore.loadFromRun`（内部で `scanCompleted` を使用）で attempt resume**（2026-06-13・実 run 実証） | **一致**（S2 クロールの resume だけは S2 未配線ゆえ未到達） |

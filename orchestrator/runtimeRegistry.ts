@@ -16,6 +16,14 @@ export interface GenerateOutput {
   raw: string; // 生 stdout（監査用）
   exitCode: number;
   emptyResult: boolean; // returncode 0 でも実質空か（E_LLM_COMM）
+  /**
+   * CLI が機械可読エラーを返したときのコード（gemini error.code 等）。成功/未対応は undefined。
+   * 例: gemini の認証未設定は code=41。emptyResult の原因切り分け（認証 vs 生成空）に使う。
+   * exactOptionalPropertyTypes: 値があるときだけ載せる。
+   */
+  errorCode?: number;
+  /** 同・エラーメッセージ（診断用・人間可読）。 */
+  errorMessage?: string;
 }
 
 /** 1つの runtime（CLI subprocess 型）。 */

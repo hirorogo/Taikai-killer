@@ -3,13 +3,19 @@
  * 移植元: dashboard/server/services/chat_runtime_gemini.py（speca, Python→TS）。
  * 構造は claudeRunner.ts と同形に揃える（spawn / stdin プロンプト / ハード timeout / 本文抽出 / --version 存在確認）。
  *
- * ✅ 実機検証済み（gemini CLI v0.41.2, 2026-06-11）:
- * - 非対話: `-p ""` ＋ プロンプトは stdin（`-p` の値は stdin に追記される仕様）。
+ * ✅ 実機検証済み（gemini CLI v0.41.2, 2026-06-13 再検証）:
+ * - 非対話: `-p ""` ＋ プロンプトは stdin（`-p` の値は stdin 入力に追記される仕様＝空にして純 stdin）。
  * - 機械可読: `-o json`。成功時 `{ "response": "<text>", "stats": {...}, "session_id": ... }`、
- *   エラー時 `{ "session_id": ..., "error": { "type", "message", "code" } }`。
- * - 自動承認: `--approval-mode yolo`（ツール確認を出さない）。
+ *   エラー時 `{ "session_id": ..., "error": { "type", "message", "code" } }`（認証未設定は code=41）。
+ * - 自動承認: `--approval-mode yolo`（ツール確認を出さない・純生成では未使用）。
+ * - ⚠ **Windows の spawn 作法（重要・2026-06-13 修正）**: `shell:true` は空文字引数 `-p ""` を連結時に
+ *   落とし「Not enough arguments following: p」で実発火しなかった。`cmd.exe /c gemini …args`（shell:false・
+ *   明示 args 配列）に変更して空引数を保つ（実機で認証 error.code=41 まで到達を確認）。spawnGemini 参照。
  * - ⚠ 認証は別途必要: GEMINI_API_KEY / GOOGLE_GENAI_USE_GCA(Gemini Code Assist=サブスク) 等。
- *   未設定だと error.code=41 を返す。checkAvailable は `--version` の存在確認のみで認証は見ない。
+ *   未設定だと error.code=41 を返す（`taikai probe-gemini` が明示）。checkAvailable は `--version` の
+ *   存在確認のみで認証は見ない。
+ * - ⚠ `--approval-mode yolo` は「folder not trusted」だと既定に上書きされる（ツール使用フェーズで要注意。
+ *   純生成は影響なし）。
  */
 import { spawn } from "node:child_process";
 import type { GenerateInput, GenerateOutput, Runtime } from "../runtimeRegistry.ts";
@@ -60,12 +66,40 @@ function extractText(stdout: string): { text: string; isError: boolean } {
   }
 }
 
+/**
+ * gemini CLI の機械可読エラー（{session_id, error:{type,message,code}}）を raw 出力から抽出する。純ロジック。
+ * 認証未設定は stdout が空で **stderr 側に**この JSON が出る（警告行が前置されるため、最初の `{` から
+ * 最後の `}` までを切り出してパースする）。error フィールドが無ければ null（＝エラーでない/構造未知）。
+ */
+function parseGeminiError(raw: string): { code?: number; message?: string } | null {
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start < 0 || end <= start) return null;
+  let obj: unknown;
+  try {
+    obj = JSON.parse(raw.slice(start, end + 1));
+  } catch {
+    return null;
+  }
+  if (typeof obj !== "object" || obj === null) return null;
+  const err = (obj as Record<string, unknown>)["error"];
+  if (typeof err !== "object" || err === null) return null;
+  const e = err as Record<string, unknown>;
+  const out: { code?: number; message?: string } = {};
+  if (typeof e["code"] === "number") out.code = e["code"];
+  if (typeof e["message"] === "string") out.message = e["message"];
+  return out;
+}
+
 function spawnGemini(args: string[], promptStdin: string, timeoutMs: number): Promise<GenerateOutput> {
   return new Promise<GenerateOutput>((resolve, reject) => {
-    const child = spawn("gemini", args, {
-      shell: IS_WIN, // Windows は gemini.cmd を PATH から解決させる
-      windowsHide: true,
-    });
+    // Windows: gemini は gemini.cmd。**shell:true は空文字引数（`-p ""`）を連結で落とす**ため使えない
+    // （v0.41.2 で「Not enough arguments following: p」になり実発火しなかった）。cmd.exe /c に明示 args
+    // 配列で渡すと空引数が保たれる（実機検証: 認証 error.code=41 まで到達＝引数解釈は正しい）。
+    // 非 Windows: gemini は実行可能ファイルなので直接 spawn（shell 不要・空引数も保たれる）。
+    const child = IS_WIN
+      ? spawn("cmd.exe", ["/c", "gemini", ...args], { windowsHide: true })
+      : spawn("gemini", args, { windowsHide: true });
 
     let stdout = "";
     let stderr = "";
@@ -93,12 +127,20 @@ function spawnGemini(args: string[], promptStdin: string, timeoutMs: number): Pr
         return;
       }
       const { text } = extractText(stdout);
-      resolve({
+      const empty = text.trim() === "";
+      // 空のときは機械可読エラー（認証 code=41 等）を stdout/stderr から拾って診断に載せる。
+      const out: GenerateOutput = {
         text,
         raw: stdout || stderr,
         exitCode: code ?? -1,
-        emptyResult: text.trim() === "",
-      });
+        emptyResult: empty,
+      };
+      if (empty) {
+        const err = parseGeminiError(stdout) ?? parseGeminiError(stderr);
+        if (err?.code !== undefined) out.errorCode = err.code;
+        if (err?.message !== undefined) out.errorMessage = err.message;
+      }
+      resolve(out);
     });
 
     // プロンプトは stdin で渡す（argv クオート地獄を回避 / claude と同方針）。
@@ -141,4 +183,4 @@ export const geminiRunner: Runtime = {
 };
 
 // テスト用に純ロジックを named export（外部プロセス非依存）。
-export { extractText, composePrompt, buildArgs };
+export { extractText, composePrompt, buildArgs, parseGeminiError };

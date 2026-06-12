@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractText, composePrompt, buildArgs } from "../orchestrator/runtimes/geminiRunner.ts";
+import { extractText, composePrompt, buildArgs, parseGeminiError } from "../orchestrator/runtimes/geminiRunner.ts";
 import type { GenerateInput } from "../orchestrator/runtimeRegistry.ts";
 
 describe("geminiRunner.extractText", () => {
@@ -43,6 +43,34 @@ describe("geminiRunner.composePrompt", () => {
 
   it("system 有りは先頭に畳み込む", () => {
     expect(composePrompt({ ...base, system: "S" })).toBe("S\n\nP");
+  });
+});
+
+describe("geminiRunner.parseGeminiError", () => {
+  it("認証エラー JSON（code=41）を警告行が前置されていても抽出", () => {
+    const stderr = [
+      "YOLO mode is enabled. All tool calls will be automatically approved.",
+      'Approval mode overridden to "default" because the current folder is not trusted.',
+      "{",
+      '  "session_id": "abc",',
+      '  "error": { "type": "Error", "message": "Please set an Auth method", "code": 41 }',
+      "}",
+    ].join("\n");
+    expect(parseGeminiError(stderr)).toEqual({ code: 41, message: "Please set an Auth method" });
+  });
+
+  it("error フィールドの無い JSON は null（成功 response 等）", () => {
+    expect(parseGeminiError(JSON.stringify({ response: "hi", session_id: "x" }))).toBeNull();
+  });
+
+  it("JSON が無い素テキストは null", () => {
+    expect(parseGeminiError("Not enough arguments following: p")).toBeNull();
+    expect(parseGeminiError("")).toBeNull();
+  });
+
+  it("code/message が部分的でも取れる分だけ返す", () => {
+    expect(parseGeminiError('{"error":{"message":"boom"}}')).toEqual({ message: "boom" });
+    expect(parseGeminiError('{"error":{"code":7}}')).toEqual({ code: 7 });
   });
 });
 

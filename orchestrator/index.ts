@@ -34,11 +34,39 @@ async function probe(): Promise<void> {
   process.exit(out.emptyResult ? 1 : 0);
 }
 
+/** gemini スパイク: gemini CLI が available か＋実発火（認証）を最小プロンプトで確認。 */
+async function probeGemini(): Promise<void> {
+  const avail = await geminiRunner.checkAvailable();
+  console.log(`[probe:gemini] available: ${avail.ok}${avail.hint ? ` (${avail.hint})` : ""}`);
+  if (!avail.ok) process.exit(2);
+  const out = await geminiRunner.run({
+    prompt: 'Reply with exactly this JSON and nothing else: {"ok": true}',
+    timeoutMs: 60_000,
+  });
+  console.log(`[probe:gemini] exitCode=${out.exitCode} empty=${out.emptyResult}`);
+  if (out.errorCode !== undefined) {
+    // 認証未設定（code=41）等を明示。設定例も出して次アクションを示す。
+    console.error(`[probe:gemini] error.code=${out.errorCode}: ${out.errorMessage ?? ""}`);
+    if (out.errorCode === 41) {
+      console.error(
+        "[probe:gemini] 認証未設定。サブスク(Gemini Code Assist)なら `setx GOOGLE_GENAI_USE_GCA true`、" +
+          "または `setx GEMINI_API_KEY <key>` を設定して再実行（CLAUDE.md 環境変数）。",
+      );
+    }
+    process.exit(1);
+  }
+  console.log(`[probe:gemini] text: ${out.text.slice(0, 200)}`);
+  process.exit(out.emptyResult ? 1 : 0);
+}
+
 async function main(): Promise<void> {
   const runDir = getOpt("run-dir") ?? "outputs/dev-run";
   switch (cmd) {
     case "probe":
       await probe();
+      break;
+    case "probe-gemini":
+      await probeGemini();
       break;
     case "run": {
       const { runSlice } = await import("./runner.ts");
@@ -148,7 +176,7 @@ async function main(): Promise<void> {
       break;
     }
     default:
-      console.error("usage: taikai <probe|run|doctor|status|evolve|experiment|quest|coevolve|loop> [--run-dir <path>] [--quest xq|ai|robo|data] [--ga N] [--rounds N] [--popSize N] [--games N] [--archiveSize N] [--max-rounds N] [--patience N] [--generations N] [--topK N] [--seed N]");
+      console.error("usage: taikai <probe|probe-gemini|run|doctor|status|evolve|experiment|quest|coevolve|loop> [--run-dir <path>] [--quest xq|ai|robo|data] [--ga N] [--rounds N] [--popSize N] [--games N] [--archiveSize N] [--max-rounds N] [--patience N] [--generations N] [--topK N] [--seed N]");
       process.exit(2);
   }
 }
