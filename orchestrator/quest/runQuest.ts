@@ -20,6 +20,7 @@
 
 import { optimize } from "../../evolution/numericOptimizer.ts";
 import type { Params } from "../../evolution/numericOptimizer.ts";
+import { populationGA } from "./populationGA.ts";
 import type { NumericCandidate, QuestAdapter } from "./adapter.ts";
 
 /** runQuest のオプション。すべて決定性に寄与する（seed 固定で完全再現）。 */
@@ -53,6 +54,11 @@ export interface RunQuestOptions {
    * 未指定なら純ヒルクライム（リスタートなし）。
    */
   restartAfter?: number;
+  /**
+   * 指定すると本格GA（populationGA: 個体群+交叉+突然変異+エリート保存）で探索する。
+   * 未指定ならヒルクライム（numericOptimizer）。多峰・広域探索はGAが有利。
+   */
+  gaPopSize?: number;
 }
 
 /** runQuest の結果。来歴を辿れるよう最良候補・スコア・評価回数を含む。 */
@@ -105,6 +111,17 @@ async function runNumeric<Candidate extends NumericCandidate>(
   // optimize は Promise<number> を返す evaluate を期待する。adapter.evaluate に委譲。
   // Params → Candidate は構造的に同一（NumericCandidate = Record<string, number>）。
   const evaluate = (p: Params): Promise<number> => adapter.evaluate(p as Candidate);
+
+  // gaPopSize 指定時は本格GA（個体群探索）。多峰・広域に強い。
+  if (opts.gaPopSize !== undefined && opts.gaPopSize > 1) {
+    const ga = await populationGA(evaluate as (c: Record<string, number>) => Promise<number>, {
+      seed: opts.seed,
+      generations: Math.max(0, Math.trunc(opts.generations)),
+      popSize: Math.trunc(opts.gaPopSize),
+      initial: params0,
+    });
+    return { best: ga.best as Candidate, bestScore: ga.bestScore, evaluations: ga.evaluations };
+  }
 
   const res = await optimize(params0, evaluate, {
     iterations: Math.max(0, Math.trunc(opts.generations)),
