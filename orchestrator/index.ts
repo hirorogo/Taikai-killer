@@ -72,19 +72,31 @@ async function main(): Promise<void> {
       break;
     }
     case "quest": {
-      // 標準化フレームワーク: クエストを GA で自律最適化（LLM不要・numeric）
+      // 標準化フレームワーク: クエストを GA で自律最適化（LLM不要・numeric）。--quest で選択。
+      const which = getOpt("quest") ?? "xq";
       const { runQuest } = await import("./quest/runQuest.ts");
-      const { xqAdapter } = await import("./quest/xqAdapter.ts");
-      const adapter = xqAdapter; // 現状 X Quest(7並べ)のみ。AI/Data/Robo は同 adapter 形で追加予定
+      type NumAdapter = import("./quest/adapter.ts").QuestAdapter<Record<string, number>>;
+      let adapter: NumAdapter;
+      let subDir: string;
+      if (which === "ai") {
+        adapter = (await import("./quest/aiHyperoptAdapter.ts")).aiHyperoptAdapter;
+        subDir = "quests/ai-hyperopt";
+      } else if (which === "robo") {
+        adapter = (await import("./quest/roboControlAdapter.ts")).roboControlAdapter;
+        subDir = "quests/robo-control";
+      } else {
+        adapter = (await import("./quest/xqAdapter.ts")).xqAdapter;
+        subDir = "quests/xq-7narabe";
+      }
       const generations = Number(getOpt("generations") ?? 15);
       const seed = Number(getOpt("seed") ?? 42);
       const init = await adapter.evaluate(adapter.initialCandidate());
       console.log(`[quest:${adapter.questId}] initial fitness=${init.toFixed(3)}`);
-      const res = await runQuest(adapter, { seed, generations, submissionDir: "quests/xq-7narabe" });
+      const res = await runQuest(adapter, { seed, generations, submissionDir: subDir });
       console.log(
         `[quest] best fitness=${res.bestScore.toFixed(3)} (evals=${res.evaluations}, improved=${res.bestScore >= init})`,
       );
-      console.log(`[quest] best=${JSON.stringify(res.best)} → submission 書き出し済み`);
+      console.log(`[quest] best=${JSON.stringify(res.best)} → ${subDir}/best_params.json`);
       break;
     }
     case "status": {

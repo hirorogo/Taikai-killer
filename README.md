@@ -290,10 +290,10 @@ flowchart TD
 
 ## Status / Roadmap
 
-- ✅ **設計確定**：パイプライン全体・データ契約・オーケストレータ・受任リスク（[decisions.md](./docs/decisions.md)）
-- ✅ **縦串MVP仕様**：1大会で1result出す最小経路を定義（[mvp-vertical-slice.md](./docs/mvp-vertical-slice.md)）
-- 🔧 **実装中（未）**：`orchestrator/` TS 移植・`schemas/*.json` 実体化・縦串のコード化・dashboard server の TS 化
-- 🔜 **次スコープ**：進化(island)・監査ハッシュチェーン・提出物 attestation・presentation 生成
+- **設計確定**：パイプライン全体・データ契約・オーケストレータ・受任リスク（[decisions.md](./docs/decisions.md)）
+- **縦串MVP仕様**：1大会で1result出す最小経路を定義（[mvp-vertical-slice.md](./docs/mvp-vertical-slice.md)）
+- **実装中（未）**：`orchestrator/` TS 移植・`schemas/*.json` 実体化・縦串のコード化・dashboard server の TS 化
+- **次スコープ**：進化(island)・監査ハッシュチェーン・提出物 attestation・presentation 生成
 
 ## Docs
 

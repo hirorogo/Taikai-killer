@@ -3,7 +3,7 @@
 シンギュラリティバトルクエスト（以下 SBQ）の **5クエストを 1 つの標準ハーネスで横断して攻略する**ための設計ドキュメント。
 正本は [architecture.md](./architecture.md)（S6 の2評価モード・データ契約）と [decisions.md](./decisions.md)（D8 対象大会・D18 進化2トラック）。
 本書は「各クエストを共通の `候補→評価→最適化→提出` に落とす標準化（**QuestAdapter** 抽象）」を定義し、
-**実装済み（`orchestrator/quest/{adapter,runQuest,xqAdapter}.ts` / `quests/xq-7narabe/*` / `evolution/numericOptimizer.ts` / `orchestrator/battle.ts`）と未実装（AI/Data/Robo の評価器・GA・LLM 変異）を厳密に区別**する（実装済みを過小申告せず、未実装を誇張しない。判定語は [implementation-status.md](./implementation-status.md) に従う）。
+**実装済み（`orchestrator/quest/{adapter,runQuest,xqAdapter,aiHyperoptAdapter,roboControlAdapter}.ts` / `quests/{xq-7narabe,ai-hyperopt,robo-control}/*` / `evolution/numericOptimizer.ts` / `orchestrator/battle.ts`）と未実装（Data の評価器、AI/Robo の GA・LLM 変異）を厳密に区別**する（実装済みを過小申告せず、未実装を誇張しない。判定語は [implementation-status.md](./implementation-status.md) に従う）。
 
 ---
 
@@ -14,11 +14,11 @@ SBQ は 1 大会の中に毛色の違う複数クエストが並ぶ。本ハー�
 
 | クエスト | 課題の型 | 狙い（本ハーネスで何を自動化するか） | 標準化対象 |
 |---|---|---|---|
-| **X Quest** | ゲームAI（不完全情報・対戦） | 探索パラメータを自己対戦勝率で大量チューニングし、手動調整の壁を超える（7並べで✅実装・実動） | ✅ |
-| **AI Quest** | 機械学習モデリング | ハイパーパラメータ＋前処理を検証精度で最適化、approach は LLM が構造変異 | ✅ |
-| **Data Quest** | データ分析・予測 | 分析/特徴量コードを LLM が大量生成し、held-out メトリクスで選抜 | ✅ |
-| **Robo Quest** | ロボ制御（シミュレータ） | 制御方策をシミュ報酬で評価、LLM が方策骨子・数値最適化がゲイン | ✅ |
-| **Cyber Quest** | CTF（攻撃・防御） | — | ❌ 除外（CTF は自動探索ループの形が別。本ハーネスの標準化外） |
+| **X Quest** | ゲームAI（不完全情報・対戦） | 探索パラメータを自己対戦勝率で大量チューニングし、手動調整の壁を超える（7並べで実装・実動） | 済 |
+| **AI Quest** | 機械学習モデリング | ハイパーパラメータ＋前処理を検証精度で最適化、approach は LLM が構造変異 | 済 |
+| **Data Quest** | データ分析・予測 | 分析/特徴量コードを LLM が大量生成し、held-out メトリクスで選抜 | 済 |
+| **Robo Quest** | ロボ制御（シミュレータ） | 制御方策をシミュ報酬で評価、LLM が方策骨子・数値最適化がゲイン | 済 |
+| **Cyber Quest** | CTF（攻撃・防御） | — | 除外（CTF は自動探索ループの形が別。本ハーネスの標準化外） |
 
 > **本ハーネスの価値（後述 §6）**: 個々のクエストに最強ソルバを 1 本ずつ書くのではなく、
 > **4クエストを横断して 1 つの標準ループで殴る**点にある。二番煎じのソルバ寄せ集めではない。
@@ -45,7 +45,7 @@ SBQ は 1 大会の中に毛色の違う複数クエストが並ぶ。本ハー�
 
 各クエストの差分はこの数点だけに閉じる。共通部（最適化器・CB・resume・provenance・leaderboard）は**全クエストで共有**する。
 
-> ✅ **実装状況**: `orchestrator/quest/adapter.ts` は**実装済み**（`QuestAdapter<Candidate>` を named export）。
+> **実装状況**: `orchestrator/quest/adapter.ts` は**実装済み**（`QuestAdapter<Candidate>` を named export）。
 > 実行ループ `orchestrator/quest/runQuest.ts`、X Quest の実アダプタ `orchestrator/quest/xqAdapter.ts` も実装済みで vitest 緑。
 > 下記シグネチャは**実物 `adapter.ts` の再掲**（提案ではなく現物）。
 > `Params` / `EvaluateFn` / `OptimizeResult` / `optimize()` は `evolution/numericOptimizer.ts` の**実 export**、
@@ -115,7 +115,7 @@ export interface QuestAdapter<Candidate> {
 ```
 
 - **共通の最適化器**は `optimize()`（数値・実装済み）と LLM 構造変異（S5）。`QuestAdapter` はそれを**呼ぶだけ**で、最適化ロジックを再実装しない（`runQuest` が橋渡し）。
-- ⚠️ **「差分は数点だけに閉じる」の限界**: 評価器のコスト特性はクエストで桁違いになる。AI のハイパラ評価は同期的な純ロジックに近いが、**X（7並べ）も Robo も評価本体は Python サイドカー（§5）に委譲され、`crawl.ts` 型の spawn / stdin / ハード timeout / 失敗時 partial を内包する非同期 I/O** になる（実際 `xqAdapter.evaluate` は `evaluate.py` を spawn する）。`evaluate(c) → Promise<number>` の型シグネチャは共通化できても、**実装コストと内部構造は均せない**（X/Robo は内部でサイドカー spawn を抱える）。共通抽象の旨味は「最適化器・runQuest・provenance を全クエストで共有できる」点にあり、評価器の中身までは均らない。
+- **「差分は数点だけに閉じる」の限界**: 評価器のコスト特性はクエストで桁違いになる。AI のハイパラ評価は同期的な純ロジックに近いが、**X（7並べ）も Robo も評価本体は Python サイドカー（§5）に委譲され、`crawl.ts` 型の spawn / stdin / ハード timeout / 失敗時 partial を内包する非同期 I/O** になる（実際 `xqAdapter.evaluate` は `evaluate.py` を spawn する）。`evaluate(c) → Promise<number>` の型シグネチャは共通化できても、**実装コストと内部構造は均せない**（X/Robo は内部でサイドカー spawn を抱える）。共通抽象の旨味は「最適化器・runQuest・provenance を全クエストで共有できる」点にあり、評価器の中身までは均らない。
 - 対戦型クエスト（X）の評価器は LLM 非依存の数値トラック評価器として使える（[architecture.md](./architecture.md)「②対戦型は LLM 非依存の評価関数＝数値最適化トラックの評価器にそのまま使える」）。**ただし「対戦型＝そのまま `runRoundRobin` の `win_rate`」は2人対戦に限った話**。`jankenEvolve.ts`（2人じゃんけん）は `battle.ts` を import のみで合成した先行実証だが、**3-4人卓の7並べのような多人数同卓ゲームは2人専用の `runRoundRobin` には乗らない**。そこで X Quest は `battle.ts` を使わず、**Python エンジン側の self-play（`evaluate.py` の座席ローテ self-play）で N人同卓を1局として回し、勝率を fitness として返す**実装を採った（§4.1）。さらに `jankenEvolve` も `win_rate` を**そのままは使っていない**点に注意（draw=0.5 換算の独自集計／後述 §5）。
 
 ---
@@ -124,13 +124,13 @@ export interface QuestAdapter<Candidate> {
 
 | クエスト | 候補(candidate) | 評価器(fitness) | 最適化 | 実装の現在地 |
 |---|---|---|---|---|
-| **X**（ゲームAI） | 7並べ AI の**8 探索パラメータ**（ベクタ＝`NumericCandidate`） | **3人 self-play の勝率**（`evaluate.py`：座席ローテで席バイアス除去、N人同卓1局を Python エンジンで回す） | **ヒルクライム+リスタート**（数値・LLM不要／D18①） | ✅**実装・実動**: `engine.py`（本家準拠ルール）/`ai_param.py`（8 param AI）/`evaluate.py`（席ローテ self-play）＋`xqAdapter.ts`→`runQuest.ts`→`numericOptimizer`。pytest 7 件・vitest 33 件緑、同 seed で win_rate bit 一致。`battle.ts`（2人総当たり）は7並べには使わず Python エンジン側で N人卓を実装。GA（交叉/個体群）は未実装 |
-| **AI**（ML） | **ハイパーパラメータ**（＋前処理選択） | **検証精度**（held-out / CV） | **GA + LLM**（数値=GA、approach=LLM 構造変異／D18①+②） | 数値最適化器の器は ✅／**ML 評価器・GA・LLM approach 変異ループは未実装** |
-| **Data**（分析） | **分析コード**（特徴量・前処理・モデル） | **held-out メトリクス**（リーク無し検証） | **LLM**（S5 コード生成＝構造変異／D18②） | S5 コード生成ループは縦串で ✅実動（fizzbuzz/roman）。**Data 固有の held-out 評価器は未実装** |
-| **Robo**（制御） | **制御方策**（ゲイン・方策パラメータ） | **シミュ報酬**（決定的シミュレータ） | **LLM + GA**（方策骨子=LLM、ゲイン=数値最適化） | **シミュレータ・報酬評価器・配線とも未実装**（数値最適化器の器のみ流用可） |
+| **X**（ゲームAI） | 7並べ AI の**8 探索パラメータ**（ベクタ＝`NumericCandidate`） | **3人 self-play の勝率**（`evaluate.py`：座席ローテで席バイアス除去、N人同卓1局を Python エンジンで回す） | **ヒルクライム+リスタート**（数値・LLM不要／D18①） | **実装・実動**: `engine.py`（本家準拠ルール）/`ai_param.py`（8 param AI）/`evaluate.py`（席ローテ self-play）＋`xqAdapter.ts`→`runQuest.ts`→`numericOptimizer`。pytest 22 件（`test_engine.py`+`test_ai_param.py`）・quest 横断ハーネス vitest 87 件緑、同 seed で win_rate bit 一致。`battle.ts`（2人総当たり）は7並べには使わず Python エンジン側で N人卓を実装。GA（交叉/個体群）は未実装 |
+| **AI**（ML） | **5 ハイパーパラメータ**（lr/reg/hidden/epochs/init_scale＝`NumericCandidate`） | **held-out 検証精度**（`evaluate.py`：seed 固定の合成データを train/held-out 分割、精度を fitness） | **ヒルクライム+リスタート**（数値・LLM不要／D18①。numericOptimizer 直結） | **実装・実動**: `quests/ai-hyperopt/evaluate.py`＋`aiHyperoptAdapter.ts`→`runQuest.ts`→`numericOptimizer`。xqAdapter と同一 `QuestAdapter<NumericCandidate>` 契約・最適化器無改変共有。GA・LLM approach 変異ループは未実装（数値トラックのみ） |
+| **Data**（分析） | **分析コード**（特徴量・前処理・モデル） | **held-out メトリクス**（リーク無し検証） | **LLM**（S5 コード生成＝構造変異／D18②） | S5 コード生成ループは縦串で実動（fizzbuzz/roman）。**Data 固有の held-out 評価器は未実装** |
+| **Robo**（制御） | **5 制御ゲイン**（kp_lin/kp_ang/kd_ang/align_thresh/v_cruise＝`NumericCandidate`） | **シミュ報酬**（`sim.py`：決定的 2 輪到達シミュ、`evaluate.py` が多エピソード平均報酬を fitness） | **ヒルクライム+リスタート**（数値・LLM不要／D18①。numericOptimizer 直結） | **実装・実動**: `quests/robo-control/{sim.py,evaluate.py}`＋`roboControlAdapter.ts`→`runQuest.ts`→`numericOptimizer`。xqAdapter と同一契約・最適化器無改変共有。方策骨子の LLM 変異・GA は未実装（数値トラックのみ） |
 
 判定語（[implementation-status.md](./implementation-status.md) と同義）:
-- **✅実装・実動** = `outputs/` に実 run 成果物がある or テスト緑で配線済み。
+- **実装・実動** = `outputs/` に実 run 成果物がある or テスト緑で配線済み。
 - **未実装** = 設計はあるが該当コードが無い（評価器・最適化器の中身）。
 
 > **正直な区別**: 横断的に再利用できる共有部品は —
@@ -139,15 +139,16 @@ export interface QuestAdapter<Candidate> {
 > ③ `battle.runRoundRobin()`（**2人ペア**総当たり集計＋じゃんけん優劣表）。
 > ③ `runRoundRobin` は **2人対戦専用**であり、**3-4人卓の多人数同卓ゲーム（7並べ等）の卓内1局には使えない**。
 > そのため X Quest は ③ を使わず、Python エンジン側の self-play（`evaluate.py`）で N人卓を実装した（§4.1）。
-> 横断的に**無改変で**効くのは ①② で、評価器の中身（X は Python サイドカー、AI/Data/Robo は各メトリクス）はクエストごとに書く。
-> X Quest は**✅実装・実動**（`engine.py`/`ai_param.py`/`evaluate.py`＋`xqAdapter`→`runQuest`、pytest 7/vitest 33 緑）。
-> 一方、表の「held-out 評価器」「シミュ報酬」「LLM approach 変異ループ」「GA」は AI/Data/Robo については**まだコードに無い**（`numericOptimizer` は**GA ではなくヒルクライム**である点に注意）。`jankenEvolve.ts` は①③を合成した先行実証（**2人**じゃんけん／D18① デモ・本番未配線。N人卓は別物）。
+> 横断的に**無改変で**効くのは ①② で、評価器の中身（X/AI/Robo はそれぞれ Python サイドカー、Data は各メトリクス）はクエストごとに書く。
+> この「①② 無改変共有・評価器だけ差し替え」が実際に**3 クエスト（X=ゲーム AI・AI=ML ハイパラ・Robo=ロボ制御）で達成済み**であり、§6 が主張する「横断ハーネスの汎用性」は AI/Robo で実証されている。
+> X/AI/Robo の 3 クエストは**実装・実動**（X=`engine.py`/`ai_param.py`/`evaluate.py`＋`xqAdapter`、AI=`ai-hyperopt/evaluate.py`＋`aiHyperoptAdapter`、Robo=`robo-control/{sim.py,evaluate.py}`＋`roboControlAdapter`、いずれも→`runQuest`→`numericOptimizer`。xq pytest 22／quest 横断ハーネス vitest 87 緑）。
+> 一方、**Data Quest の held-out 評価器**、および AI/Robo の「LLM approach 変異ループ」「GA」は**まだコードに無い**（`numericOptimizer` は**GA ではなくヒルクライム**である点に注意。AI/Robo は数値トラックのみ実装）。`jankenEvolve.ts` は①③を合成した先行実証（**2人**じゃんけん／D18① デモ・本番未配線。N人卓は別物）。
 
 ---
 
 ## 4. 最初の具体例 — X Quest（7並べ）
 
-> ⚠️ **題材選定の出所**: **7並べ／PIMC／X Quest は本書の提案であり、正本（[architecture.md](./architecture.md)・[decisions.md](./decisions.md)）には未記載**。
+> **題材選定の出所**: **7並べ／PIMC／X Quest は本書の提案であり、正本（[architecture.md](./architecture.md)・[decisions.md](./decisions.md)）には未記載**。
 > 題材は D8（対象大会確定）後に差し替え可能で、本節は確定仕様ではなく設計のたたき台として読むこと。
 
 X Quest の題材として**7並べ**（不完全情報・多人数）を最初の具体例に置く。狙いは「**事前実行＝対戦本番前にオフラインで好きなだけ回せる**」性質を最大限使うこと。
@@ -157,7 +158,7 @@ X Quest の題材として**7並べ**（不完全情報・多人数）を最初�
 - 7並べは **PIMC**（Perfect Information Monte Carlo：相手手札を多数サンプリングして各サンプルで完全情報探索し集約）系が強い。PIMC は **1 手あたりのシミュレーション本数（budget）と決定パラメータ**が強さを決める。
 - **本番の手番には時間制約がある**が、**パラメータ探索は事前にオフラインで回せる**（提出するのは「探索済みパラメータを積んだプレイヤー」）。
   → ここで本ハーネスの標準ループが効く：**自己対戦勝率(fitness)を評価器に、パラメータを数万回チューニング**して、人手で決めた固定パラメータを**自動で超える**。
-> ✅ **評価器の構造（実装済み）**: **7並べは多人数（3 人卓）ゲームであり、`battle.ts` の2人専用 `MatchFn`（`(a, b, round) => MatchOutcome`、2 つの `play` しか取らない）には乗らない**。`runRoundRobin` は C(n,2) の**2人ペア総当たり**であって、1候補を相手と**同卓させる N 人ゲーム1局**ではない。したがって「`runRoundRobin` の `win_rate` をそのまま fitness にできる」は7並べでは**成立しない**。
+> **評価器の構造（実装済み）**: **7並べは多人数（3 人卓）ゲームであり、`battle.ts` の2人専用 `MatchFn`（`(a, b, round) => MatchOutcome`、2 つの `play` しか取らない）には乗らない**。`runRoundRobin` は C(n,2) の**2人ペア総当たり**であって、1候補を相手と**同卓させる N 人ゲーム1局**ではない。したがって「`runRoundRobin` の `win_rate` をそのまま fitness にできる」は7並べでは**成立しない**。
 >
 > - この問題は `runRoundRobin` 経由ではなく **Python エンジン側の self-play で解決済み**: `evaluate.py` が `engine.play_game(fns, seed, players_num)` で N人同卓1局を回す（`battle.ts` は共有・編集禁止なので、卓ロジックは Python サイドカーに置いた）。
 > - `evaluate.py` は **座席ローテで座席バイアスを均す**: 局 `g` で候補を席 `g % players_num` に座らせ（L57-72）、`winner == seat` を勝ちと数えて勝率を返す。配り seed は `seed+g`、相手 random も `(seed,g)` から決定的に派生（同 seed で win_rate bit 一致）。
@@ -181,7 +182,7 @@ X Quest の題材として**7並べ**（不完全情報・多人数）を最初�
 - 先行事例 **hirorogo/singyura（2025 優勝）** は **PIMC + 手動チューニングのシミュ 700 本**で勝った。これは「PIMC の強さは本数とパラメータで決まる」ことの実証であり、**手動 700 という固定値が上限になっていた**ことも示す。
 - 本ハーネスの主張は単純：**その 700（手動値）を、自己対戦勝率を fitness にした自動探索で超える**。事前実行に時間制約が無い以上、探索 budget を上げ、パラメータ空間を `optimize()` で舐めれば、手動調整の局所解を脱出できる（`numericOptimizer` のランダムリスタートが多峰性対策に効く）。
 
-> ✅ **実装状況**: 7並べの評価ハーネス配線は**実装・実動**。`engine.py`（本家準拠ルール）・`ai_param.py`（8 param ヒューリスティック AI）・`evaluate.py`（席ローテ self-play）が揃い、TS 側 `xqAdapter.ts`→`runQuest.ts`→`numericOptimizer` で配線済み。検証: pytest 7 件緑、vitest 33 件緑、`python engine.py` デモが決定的に winner を出力、`evaluate.py` は同 seed で win_rate bit 一致、パラメータ感度あり（極端値 sweep で win_rate 0.275〜0.395）。
+> **実装状況**: 7並べの評価ハーネス配線は**実装・実動**。`engine.py`（本家準拠ルール）・`ai_param.py`（8 param ヒューリスティック AI）・`evaluate.py`（席ローテ self-play）が揃い、TS 側 `xqAdapter.ts`→`runQuest.ts`→`numericOptimizer` で配線済み。検証: pytest 7 件緑、vitest 33 件緑、`python engine.py` デモが決定的に winner を出力、`evaluate.py` は同 seed で win_rate bit 一致、パラメータ感度あり（極端値 sweep で win_rate 0.275〜0.395）。
 > 共有の `numericOptimizer.optimize` は**そのまま再利用**（パラメータ探索＝評価器の中身に非依存）。
 > `battle.runRoundRobin`（2人ペア総当たり集計）は **N人卓の卓内対局には使えない**ため、7並べでは使わず、
 > N人同卓1局は **Python エンジン側（`engine.play_game` ＋ `evaluate.py` の座席ローテ）で実装**した（§4.1）。
@@ -215,10 +216,14 @@ X Quest の題材として**7並べ**（不完全情報・多人数）を最初�
 
 > **現実の到達点（再掲・正直版）**: 横断ハーネスの**骨格（候補→評価→最適化→提出の4段）は実動** —
 > `QuestAdapter` 抽象（`orchestrator/quest/adapter.ts`）・実行ループ（`runQuest.ts`）・数値最適化（`optimize`）が配線済みで、
-> **X Quest（7並べ）は end-to-end 実装・実動**（`engine.py`/`ai_param.py`/`evaluate.py`＋`xqAdapter`、pytest 7・vitest 33 緑、決定的）。
+> **X Quest（7並べ）・AI Quest（ai-hyperopt）・Robo Quest（robo-control）の 3 クエストが end-to-end 実装・実動**:
+> X=`engine.py`/`ai_param.py`/`evaluate.py`＋`xqAdapter`、AI=`ai-hyperopt/evaluate.py`（5 ハイパラ・held-out 精度）＋`aiHyperoptAdapter`、
+> Robo=`robo-control/{sim.py,evaluate.py}`（5 制御ゲイン・シミュ報酬）＋`roboControlAdapter`。
+> 3 アダプタとも `xqAdapter` と**同一の `QuestAdapter<NumericCandidate>` 契約**で、`runQuest`→`numericOptimizer` を**無改変共有**する
+> （＝本節が主張する「横断ハーネスの汎用性」が AI/Robo で実達成）。xq pytest 22・quest 横断ハーネス vitest 87 緑、いずれも seed 固定で決定的。
 > N人同卓は `runRoundRobin`（2人専用）ではなく Python エンジン側 self-play で実装した。
-> 一方 **AI/Data/Robo の各評価器（held-out メトリクス・シミュ報酬）・GA・LLM approach 変異ループ・PIMC 探索プレイヤーは未実装**。
-> 本書は実装済み部分（QuestAdapter＋X Quest）と未実装部分（他3クエストの評価器・GA・LLM 変異）を区別して書いており、
+> 一方 **Data Quest の held-out 評価器、および AI/Robo の GA・LLM approach 変異ループ・X の PIMC 探索プレイヤーは未実装**（AI/Robo は数値トラックのみ）。
+> 本書は実装済み部分（QuestAdapter＋X/AI/Robo の数値トラック）と未実装部分（Data 評価器・GA・LLM 変異）を区別して書いており、
 > **実装済みを未実装と過小申告しない／未実装を実装済みと誇張しない**双方向で誠実であることを宣言する。
 
 ---
