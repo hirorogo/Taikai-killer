@@ -58,7 +58,7 @@ runtime は **claude / gemini の CLI を subprocess で駆動**（サブスク�
 
 （TS 移植。`speca: <name>.py` は移植元）
 
-> **実装注（2026-06-11 Grep 確認）**: 下記ツリーは設計上の理想形。実在ファイルに **実在実装済み（runner 配線済み）／テストテストのみ（実装＋vitest 緑だが runner 未配線）／未作成未実装** を併記する。判定とテスト数の正は [implementation-status.md](./implementation-status.md)（`npx vitest run` = 26ファイル・349テスト全 pass を実測。数値は当該ファイルに集約し、本ファイルからは参照のみ）。`queue.ts`/`batch.ts`/`factory.ts`/`watchdog.ts`/`costTracker.ts` は **未実装（ファイルなし）** で、当該責務は runner.ts に内包または MVP スコープ外。
+> **実装注（2026-06-11 Grep 確認）**: 下記ツリーは設計上の理想形。実在ファイルに **実在実装済み（runner 配線済み）／テストテストのみ（実装＋vitest 緑だが runner 未配線）／未作成未実装** を併記する。判定とテスト数の正は [implementation-status.md](./implementation-status.md)（`npx vitest run` の実測値はそちらに集約し、本ファイルからは参照のみ＝ここに数値を重複させない）。`queue.ts`/`batch.ts`/`factory.ts`/`watchdog.ts`/`costTracker.ts` は **未実装（ファイルなし）** で、当該責務は runner.ts に内包または MVP スコープ外。
 
 ```
 orchestrator/

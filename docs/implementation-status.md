@@ -8,8 +8,10 @@
 - **未配線** = 実装はあるが `orchestrator/runner.ts` から呼ばれていない（import されていない）
 - **未検証** = LLM 発火・外部認証・実プロセスなど、ユニットテストでは確かめられない部分が未実証
 
-検証時点: 2026-06-11。`npx vitest run` = **26 ファイル / 349 テスト 全 pass**（実測。テスト数・ファイル数の正はここに集約し、他ドキュメントは本書を参照する）。
+検証時点: 2026-06-13。`npx vitest run` = **37 ファイル / 590 テスト 全 pass**（実測。テスト数・ファイル数の正はここに集約し、他ドキュメントは本書を参照する）。
 設計の正は [`docs/`](./README.md)。本書は設計（D番号）に対する**実装の現在地**だけを述べる。
+
+> 2026-06-13 更新差分: 標準化クエストフレームワーク（`orchestrator/quest/`）と自己対戦コオエボリューション（`coevolve.ts`・Hall of Fame 込み）を追加し、テストは 349→590 に増えた。§1.6 に新規モジュール表、§7（quests.md §7.5）に実測を記す。MVP 縦串（§2-4）の状態は据え置き。
 
 ---
 
@@ -19,6 +21,7 @@
 - ただし **runner に配線されているのは S3→S5→S6 の最小経路だけ**。S2 / `resume.ts`/`idempotencyStore.ts` モジュール / archiver / 進化 / Gemini / dashboard は「実装＋テスト緑」だが **runner からは呼ばれていない（未配線）**。なお S3 段の resume だけは runner の inline `loadExistingS3()` で別途動く（§2.1 / AC5）。
 - **LLM 発火に依存する箇所（S3 戦略生成・S5 生成・S5 reflector）は実 run で動いた形跡があるが、ユニットテストでは検証不能**。本書では「動く（実 run 実績あり）」と「未検証（自動テスト外）」を分けて明記する。
 - Gemini は `index.ts` に **register 済みだが、どのフェーズも `model:"claude"`** 固定で、**認証未設定なら error.code=41**（runner からは未使用＝実質未検証）。
+- **標準化クエストフレームワーク（`orchestrator/quest/`・§1.6）は別経路で動く。** `taikai quest`/`taikai coevolve` は runner（縦串 MVP）とは独立に CLI 配線済で、LLM 非依存の数値最適化（GA/ヒルクライム）＋自己対戦コオエボリューション（Hall of Fame 込み）を実 spawn で回し、`best_params.json`/`champion_params.json` を生成した実績がある（実測は quests.md §7.5）。MVP 縦串の「S2/進化/Gemini 未配線」とは別レイヤなので混同しない。
 
 ---
 
@@ -74,6 +77,24 @@
 | `evolution/jankenStrategy.ts` | じゃんけん数値パラメータ戦略 | （jankenEvolution 経由） | 未 | テストのみ |
 | `evolution/jankenEvolve.ts` | 数値戦略を勝率で進化（D18①実証） | `jankenEvolution.test.ts`(16) | 未 | テストのみ・**本番進化ループ未配線**（評価器D3確定まで起動しない＝設計通り） |
 | `evolution/evolveDemo.ts` | D18① end-to-end デモ薄ラッパ | `evolveDemo.test.ts`(9) | 未 | テストのみ・未配線（commit 6371b03 で tracked。9テスト緑） |
+
+### 1.6 標準化クエストフレームワーク（横断ハーネス・`index.ts` 配線済）
+
+D8（SBQ 全分野を狙う標準化フレーム）の実体。`taikai quest`/`taikai coevolve` で実走する。runner（縦串 MVP）とは独立した CLI 経路で、**LLM を呼ばない数値最適化トラック**（D18①）。各 adapter は Python サイドカーを spawn して評価する（決定的・seed 固定）。
+
+| ファイル | 役割 | テスト | CLI 配線 | 状態 |
+|---|---|---|---|---|
+| `orchestrator/quest/adapter.ts` | `QuestAdapter<Candidate>`／`NumericCandidate` 契約 | （各 adapter で間接） | — | 動く（型契約） |
+| `orchestrator/quest/runQuest.ts` | 汎用実行ループ（initialize→evaluate→optimize→submit）。`--ga N` で populationGA、既定はヒルクライム | `quest.test.ts`(9) | `taikai quest` | 動く（実 spawn で best_params.json 生成） |
+| `orchestrator/quest/populationGA.ts` | 個体群 GA（交叉＋突然変異＋エリート保存・決定的） | `populationGA.test.ts`(11) | quest 経由 | 動く |
+| `orchestrator/quest/parallelEval.ts` | 並行プール `mapConcurrent`/`mapConcurrentSettled`（順序保持・決定的） | `parallelEval.test.ts`(14) | coevolve 経由 | 動く |
+| `orchestrator/quest/coevolve.ts` | 自己対戦コオエボリューション＋**Hall of Fame（対戦相手アーカイブ）**。昇格判定は殿堂平均勝率 | `coevolve.test.ts`(46) | `taikai coevolve [--archiveSize N]` | 動く（実 spawn・champion_params.json 生成・実測 quests.md §7.5） |
+| `orchestrator/quest/xqAdapter.ts` | X Quest=7並べ adapter（`evaluate.py` spawn） | `xqAdapter.test.ts`(26) | `taikai quest --quest xq` | 動く |
+| `orchestrator/quest/aiHyperoptAdapter.ts` | AI Quest=ハイパラ最適 adapter | `aiHyperoptAdapter.test.ts`(26) | `--quest ai` | 動く |
+| `orchestrator/quest/roboControlAdapter.ts` | Robo Quest=制御 adapter | `roboControlAdapter.test.ts`(26) | `--quest robo` | 動く |
+| `orchestrator/quest/dataInsightAdapter.ts` | Data Quest=特徴選択 adapter | `dataInsightAdapter.test.ts`(27) | `--quest data` | 動く |
+
+実コード（Python サイドカー・X Quest）: `quests/xq-7narabe/{engine.py,ai_param.py,ai_medium.py,evaluate.py,evaluate_coevo.py,measure.py}`。spawn I/O 自体は vitest 範囲外だが、`taikai coevolve` の実走で多数の評価プロセスが完走し champion を生成した実績がある（§7.5）。**未到達**: `ai_mc.py`（PIMC）は勝ち越し未確立で未配線（quests.md §4.2）。
 
 ### 1.5 dashboard-lite（read-only ビューア）
 
