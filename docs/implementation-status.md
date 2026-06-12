@@ -161,12 +161,12 @@ mvp-vertical-slice.md の原則「無限ループ・S2大量クロール・S4独
 |---|---|---|---|
 | AC1 | `python3`＋`claude` CLI 環境で `taikai run` 一発で `result.json` が出る | 達成 | `outputs/dev-run/result.json`・`fbp-run` が実在。経路は runner.runSlice |
 | AC2 | わざと通らない仕様にすると D22 ループが3回試行し reflector feedback を feedbackHistory に残す | 部分（前進） | maxAttempts=3 ループ・reflect()・feedbackHistory.push は実装済み。**feedbackHistory は CodegenResult として `S5R` partial に永続化されるようになった（2026-06-13・§3-6 解消・実 run で確認）**。残るは**失敗注入での複数 attempt reflector 実発火の証跡**（成功 toy では 1 attempt なので multi-attempt 系列が未収集） |
-| AC3 | `tests/` を改変すると S6 が E_TEST_TAMPER で失格 | 実装あり/未実証 | `runner.ts` で `hashDir(projTests)` を S5開始時に凍結→S6で再ハッシュ比較→不一致で `E_TEST_TAMPER`+notify+exit 1。コードは正しいが**改変ケースの実 run 証跡は無く未検証** |
+| AC3 | `tests/` を改変すると S6 が E_TEST_TAMPER で失格 | **達成（2026-06-13）** | `hashDir(projTests)` を S5開始時に凍結→S6で再ハッシュ→不一致で `E_TEST_TAMPER`+notify+exit 1。**故障注入 `TAIKAI_TAMPER_INJECT=1`（既定 off）で実 run 実証**: `[S6] E_TEST_TAMPER: テストが改変された → 失格`／`notify.jsonl` に `{"type":"E_TEST_TAMPER","strategy":"S3-001"}`／**exit 1**／result.json 未生成（採点せず失格）を確認 |
 | AC4 | TOURNAMENT_INFO 必須欠落で S1 が exit 1＋通知 | 達成 | `doctor()` が必須6フィールド検査→欠落で `E_S1_INPUT` notify→exit 1 |
 | AC5 | 途中で殺して再実行すると partial から resume（同 attempt を二重実行しない） | **達成（2026-06-13）** | S3 段は inline `loadExistingS3()` で既存戦略を再利用。**S5 attempt 段も `IdempotencyStore.loadFromRun(runDir,"S5")`（resume.ts→idempotencyStore.ts を配線）で完了済み attempt をスキップ**。実 run で実証: attempt 1 を FAIL 記録のまま再起動→`[S5] attempt 1: resume skip（冪等hit, FAIL）` で **LLM 再生成せず**、`[S5] attempt 2: PASS` で続行。S5R partial が `feedbackHistory:["attempt 1: FAIL（resume・LLM再生成スキップ）","attempt 2: PASS"]` を記録。冪等hit は `cb.recordSkip("idempotent_hit")`＝失敗に加算しない（D10/D11） |
 | AC6 | result.json から provenance.derived_from で戦略→要件→ルールまで遡れる | **達成（2026-06-13）** | result.json に `provenance{produced_by:"S6", derived_from:[strategy_id], source_ref:rubric_ref}` を載せた（型＋schema＋runner 2 箇所）。実 run（toy-fizzbuzz）で result→`S3-fizzbuzz-modulo`（戦略 partial の derived_from=`["rubric:toy-fizzbuzz-rules"]`）→ rubric の鎖が **result 単体から辿れる**ことを確認済み |
 
-**サマリ**: 6項目中、**完全達成4（AC1, AC4, AC5, AC6）**、**部分2（AC2, AC3）**。（2026-06-13: AC5 を `IdempotencyStore` 配線で S5 attempt 段まで達成・実 run 実証、AC6 を result.json への provenance 付与で達成、AC2 は feedbackHistory 永続化で前進＝残るは失敗注入での multi-attempt reflector 証跡、AC3 は改ざん検知の実 run 証跡待ち。）
+**サマリ**: 6項目中、**完全達成5（AC1, AC3, AC4, AC5, AC6）**、**部分1（AC2）**。（2026-06-13: AC3 を `TAIKAI_TAMPER_INJECT` 故障注入で実 run 実証して達成、AC5 を `IdempotencyStore` 配線で達成、AC6 を result provenance で達成。残る AC2 は失敗注入での multi-attempt reflector 系列の実 run 証跡のみ＝reflector が複数回発火する toy が要る。）
 
 ---
 

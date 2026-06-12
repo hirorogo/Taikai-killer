@@ -454,6 +454,19 @@ ${strategy.approach}
   // ── S6 ベンチマーク（test型 / 改変検知）──
   phaseStarted(runDir, "S6");
   console.log("[S6] 採点…");
+  // 故障注入アフォーダンス（AC3 検証用・既定 off）: TAIKAI_TAMPER_INJECT=1 のとき S6 採点直前に
+  // projTests を1行書き換えて「S5 ワーカーがテストを改変して勝とうとした」状況を作る。本番挙動は
+  // env 未設定で不変（TAIKAI_REFLECTOR/TAIKAI_SKIP_S4 と同じ env アフォーダンス方針＝報酬ハッキング
+  // 対策ガードが実際に発火することを実 run で示すための注入口）。
+  if (process.env["TAIKAI_TAMPER_INJECT"] === "1") {
+    const victim = readdirSync(projTests).find(
+      (f) => f.endsWith(".py") || f.endsWith(".js") || f.endsWith(".ts"),
+    );
+    if (victim !== undefined) {
+      appendFileSync(join(projTests, victim), "\n# TAMPERED (AC3 fault injection)\n", "utf8");
+      console.error(`[S6] (test) TAIKAI_TAMPER_INJECT: ${victim} を改変注入`);
+    }
+  }
   const testNow = hashDir(projTests);
   if (testNow !== testFrozen) {
     console.error("[S6] E_TEST_TAMPER: テストが改変された → 失格");
