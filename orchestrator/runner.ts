@@ -20,6 +20,8 @@ import { notify } from "./notify.ts";
 import { pipelineStarted, phaseStarted, phaseCompleted } from "./events.ts";
 import { archiveRun } from "./archiver.ts";
 import { CircuitBreaker } from "./circuitBreaker.ts";
+import { IdempotencyStore } from "./idempotencyStore.ts";
+import type { IdempotencyInput } from "./idempotency.ts";
 import { dedupStrategies } from "./collector.ts";
 import { validateArtifact } from "./validate.ts";
 import { backupResult } from "./backup.ts";
@@ -315,7 +317,34 @@ Strategy[] の JSON だけを出力（id/origin/approach）。origin は "requir
     }
   }
 
+  // resume（AC5・attempt単位）: 完了済み S5 partial を冪等マーカー集合に展開し（resume.ts→
+  // idempotencyStore.ts を配線）、前 run で実行済みの attempt は LLM を再 spawn せずスキップする。
+  // 「同 attempt を二重実行しない」＝高価な LLM 生成の二重課金/二重副作用を防ぐ（D9/D10）。
+  const s5Store = IdempotencyStore.loadFromRun(runDir, "S5");
+  const s5Passed = passedS5Attempts(runDir);
+  // attempt → 冪等キー入力（partial 書き出し時の prov("S5",[strategy.id]) と同契約で一致させる）。
+  const attemptInput = (attempt: number): IdempotencyInput => ({
+    phase: "S5",
+    worker: 0,
+    batch: attempt,
+    parentIds: [strategy.id],
+    promptVersion: "",
+    model: "claude",
+  });
+
   for (let attempt = 1; !passed && attempt <= maxAttempts; attempt++) {
+    // この attempt が前 run で完了済み（冪等hit）なら再生成せずスキップ（recordSkip＝失敗に加算しない）。
+    if (s5Store.has(attemptInput(attempt))) {
+      const wasPass = s5Passed.has(attempt);
+      cb.recordSkip("idempotent_hit");
+      feedbackHistory.push(`attempt ${attempt}: ${wasPass ? "PASS" : "FAIL"}（resume・LLM再生成スキップ）`);
+      console.log(`[S5]   attempt ${attempt}: resume skip（冪等hit, ${wasPass ? "PASS" : "FAIL"}）`);
+      if (wasPass) {
+        passed = true;
+        break;
+      }
+      continue;
+    }
     const fb = feedbackHistory.length
       ? `\n## 前回の失敗（これに対処せよ・テストは改変禁止）\n${
           lastReflection ? `改善指示: ${lastReflection}\n` : ""
@@ -380,6 +409,7 @@ ${strategy.approach}
       },
       prov("S5", [strategy.id]),
     );
+    s5Store.mark(attemptInput(attempt)); // 確定 attempt を冪等マーカーに記録（同一run内の二重実行も防ぐ）
     cb.recordResult(ok);
     console.log(`[S5]   attempt ${attempt}: ${ok ? "PASS" : "FAIL"}`);
     if (ok) {
@@ -786,6 +816,30 @@ function s5AlreadyPassed(runDir: string): boolean {
     }
   }
   return false;
+}
+
+/**
+ * resume（AC5・attempt単位）: 「通過した」S5 attempt 番号の集合を返す。
+ * 非 error の CodeAttempt partial で newly_passed_ids>0（=その試行で PASS）のものの batch（=attempt）。
+ * 殺して再起動したとき、冪等スキップした attempt が PASS だったかを判定するのに使う
+ * （PASS なら passed=true にして S6 へ進む／FAIL なら次 attempt へ）。
+ */
+function passedS5Attempts(runDir: string): Set<number> {
+  const out = new Set<number>();
+  const dir = partialsDir(runDir);
+  if (!existsSync(dir)) return out;
+  const files = readdirSync(dir).filter((f) => f.startsWith("S5_PARTIAL_") && f.endsWith(".json"));
+  for (const f of files) {
+    try {
+      const art = readJson<PhaseArtifact<CodeAttempt>>(join(dir, f));
+      if (art.status !== "error" && (art.payload?.newly_passed_ids?.length ?? 0) > 0) {
+        out.add(art.payload.attempt);
+      }
+    } catch {
+      /* 壊れた partial はスキップ */
+    }
+  }
+  return out;
 }
 
 /** resume: 既存 S3 partial（status!=="error"）から戦略を復元。無ければ null（D9/AC5）。 */
