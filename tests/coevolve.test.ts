@@ -13,6 +13,8 @@ import {
   buildCoevoPayload,
   parseCoevoResult,
   shouldPromote,
+  capArchive,
+  meanWinRate,
   summarizeTrajectory,
   serializeChampion,
   writeChampion,
@@ -174,11 +176,13 @@ describe("summarizeTrajectory", () => {
   const mk = (round: number, wr: number, promoted: boolean): CoevoRound => ({
     round,
     challengerWinRate: wr,
+    archiveWinRate: wr,
     promoted,
     champion: { ...initialChampion },
+    archiveSize: 1,
   });
 
-  it("昇格 round は challengerWinRate、非昇格 round は 0.5 を並べる", () => {
+  it("昇格 round は archiveWinRate、非昇格 round は 0.5 を並べる", () => {
     const rounds = [mk(1, 0.6, true), mk(2, 0.48, false), mk(3, 0.7, true)];
     expect(summarizeTrajectory(rounds)).toEqual([0.6, 0.5, 0.7]);
   });
@@ -190,6 +194,45 @@ describe("summarizeTrajectory", () => {
   it("全防衛（昇格なし）は全て 0.5", () => {
     const rounds = [mk(1, 0.4, false), mk(2, 0.3, false)];
     expect(summarizeTrajectory(rounds)).toEqual([0.5, 0.5]);
+  });
+});
+
+describe("capArchive（殿堂サイズ制御）", () => {
+  const mkP = (v: number): Params => ({ ...initialChampion, w_suit_balance: v });
+
+  it("size 以下なら全件保持（コピーで返す）", () => {
+    const a = [mkP(1), mkP(2)];
+    const out = capArchive(a, 4);
+    expect(out).toHaveLength(2);
+    expect(out[0]).not.toBe(a[0]); // shallow copy
+    expect(out[0]).toEqual(a[0]);
+  });
+
+  it("size 超過は直近優先で末尾 size 件を残す（古いものを押し出す）", () => {
+    const a = [mkP(1), mkP(2), mkP(3), mkP(4), mkP(5)];
+    const out = capArchive(a, 3);
+    expect(out.map((p) => p["w_suit_balance"])).toEqual([3, 4, 5]);
+  });
+
+  it("size<=0 は空配列（殿堂無効に縮退）", () => {
+    expect(capArchive([mkP(1), mkP(2)], 0)).toEqual([]);
+    expect(capArchive([mkP(1)], -3)).toEqual([]);
+  });
+});
+
+describe("meanWinRate（殿堂平均勝率）", () => {
+  it("通常の平均", () => {
+    expect(meanWinRate([0.4, 0.6])).toBeCloseTo(0.5, 10);
+    expect(meanWinRate([0.6, 0.7, 0.8])).toBeCloseTo(0.7, 10);
+  });
+
+  it("空配列は 0.5（中立）", () => {
+    expect(meanWinRate([])).toBe(0.5);
+  });
+
+  it("非有限値は 0.5 に倒してから平均（NaN 伝播を断つ）", () => {
+    expect(meanWinRate([1.0, NaN])).toBeCloseTo(0.75, 10);
+    expect(meanWinRate([Infinity, 0.5])).toBeCloseTo(0.5, 10);
   });
 });
 
@@ -375,6 +418,78 @@ describe("coevolveXq（evalFn 注入・決定的駆動）", () => {
     const hardPromotions = hard.rounds.filter((r) => r.promoted).length;
     expect(hardPromotions).toBeLessThanOrEqual(easyPromotions);
     expect(hardPromotions).toBe(0); // 閾値 0.75 は到達不能
+  });
+
+  it("殿堂（archive）を result に公開し archiveSize で上限を保つ", async () => {
+    const res = await coevolveXq({
+      seed: 11,
+      rounds: 5,
+      popSize: 8,
+      generations: 5,
+      games: 10,
+      evalFn: monotoneEval,
+      archiveSize: 2,
+      writeSubmission: false,
+    });
+    // 上限 2 を超えない・最低 1（初期 champion を起点に持つ）。
+    expect(res.archive.length).toBeGreaterThanOrEqual(1);
+    expect(res.archive.length).toBeLessThanOrEqual(2);
+    // 各 round の archiveSize も上限内。
+    expect(res.rounds.every((r) => r.archiveSize >= 1 && r.archiveSize <= 2)).toBe(true);
+    // 昇格があれば殿堂の末尾（最新）は最終 champion と一致。
+    if (res.rounds.some((r) => r.promoted)) {
+      expect(res.archive[res.archive.length - 1]).toEqual(res.champion);
+    }
+  });
+
+  it("archiveSize=0 は殿堂無効＝archiveWinRate が challengerWinRate と一致（旧挙動に縮退）", async () => {
+    const res = await coevolveXq({
+      seed: 11,
+      rounds: 4,
+      popSize: 6,
+      generations: 4,
+      games: 10,
+      evalFn: monotoneEval,
+      archiveSize: 0,
+      writeSubmission: false,
+    });
+    expect(res.archive).toEqual([]);
+    expect(res.rounds.every((r) => r.archiveWinRate === r.challengerWinRate)).toBe(true);
+  });
+
+  it("単調（推移的）評価では殿堂平均 >= 直近勝率（古い champion ほど弱い）", async () => {
+    const res = await coevolveXq({
+      seed: 13,
+      rounds: 5,
+      popSize: 8,
+      generations: 5,
+      games: 10,
+      evalFn: monotoneEval,
+      archiveSize: 4,
+      writeSubmission: false,
+    });
+    for (const r of res.rounds) {
+      if (r.promoted) {
+        // 殿堂には過去の（より弱い）champion が混ざる → challenger は平均でより勝ち越す。
+        expect(r.archiveWinRate).toBeGreaterThanOrEqual(r.challengerWinRate - 1e-9);
+      }
+    }
+  });
+
+  it("seed 固定で殿堂（archive）まで完全再現", async () => {
+    const opts = {
+      seed: 21,
+      rounds: 4,
+      popSize: 6,
+      generations: 4,
+      games: 10,
+      evalFn: monotoneEval,
+      archiveSize: 3,
+      writeSubmission: false,
+    } as const;
+    const r1 = await coevolveXq(opts);
+    const r2 = await coevolveXq(opts);
+    expect(r1.archive).toEqual(r2.archive);
   });
 
   it("初期 champion を破壊しない（initialChampion は読み取り専用の意図を保つ）", async () => {

@@ -37,6 +37,7 @@ import { join } from "node:path";
 import { writeFileSync } from "node:fs";
 import { populationGA } from "./populationGA.ts";
 import type { GACandidate } from "./populationGA.ts";
+import { mapConcurrent } from "./parallelEval.ts";
 
 const IS_WIN = process.platform === "win32";
 
@@ -193,16 +194,55 @@ export function shouldPromote(
   return challengerWinRate > 0.5 + margin;
 }
 
+/**
+ * 殿堂（Hall of Fame）= 過去 champion のアーカイブを上限 size に保つ。純ロジック・決定的。
+ *
+ * 単一の latest champion だけを相手にすると、A に勝つ B・B に勝つ C・C に勝つ A …という
+ * **循環（intransitivity）**で champion が振動し、過去に倒した相手に再び負ける「忘却」が起きる
+ * （実測: champion 対 medium が default 0.480→0.458 と微減した drift の正体）。アーカイブに
+ * 過去 champion を保持し、昇格判定をアーカイブ平均勝率にすることで「古い強者にも勝てる」ことを
+ * 要求し、循環的な後退を抑える（co-evolution の標準対策＝対戦相手の多様化）。
+ *
+ * - 直近を優先して末尾 size 件を残す（古い順に押し出す＝FIFO で最新世代を厚く保つ）。
+ * - size<=0 は空配列（アーカイブ無効＝latest だけで戦う旧挙動に縮退できるよう保護）。
+ * - 各要素は呼び出し側でコピー済み前提だが、防御的に shallow copy して返す（共有参照汚染を断つ）。
+ */
+export function capArchive(archive: readonly Params[], size: number): Params[] {
+  const n = Math.max(0, Math.trunc(size));
+  if (n === 0) return [];
+  const kept = archive.length > n ? archive.slice(archive.length - n) : archive.slice();
+  return kept.map((p) => ({ ...p }));
+}
+
+/**
+ * 勝率配列の平均（アーカイブ平均勝率）を返す。純ロジック・決定的。
+ * 空配列は 0.5（互角＝中立。アーカイブが空のとき昇格を「明確な勝ち越し」要求で誤判定しない）。
+ * 非有限値は 0.5 に丸めてから平均（評価失敗を中立に倒し、NaN 伝播で平均を壊さない）。
+ */
+export function meanWinRate(rates: readonly number[]): number {
+  if (rates.length === 0) return 0.5;
+  let sum = 0;
+  for (const r of rates) sum += Number.isFinite(r) ? r : 0.5;
+  return sum / rates.length;
+}
+
 /** 1 round の結果（来歴・推移整形のための素データ）。 */
 export interface CoevoRound {
   /** round 番号（1-based）。 */
   round: number;
   /** この round の最良 challenger の対（round 開始時）champion 勝率。 */
   challengerWinRate: number;
+  /**
+   * 最良 challenger の殿堂（アーカイブ）平均勝率（昇格判定に使った値）。
+   * アーカイブ無効（archiveSize<=0）のときは challengerWinRate と同値。
+   */
+  archiveWinRate: number;
   /** 昇格したか（shouldPromote の結果）。 */
   promoted: boolean;
   /** この round 終了時点の champion（昇格していれば新 champion、しなければ据え置き）。 */
   champion: Params;
+  /** この round 終了時点の殿堂サイズ（保持している過去 champion 数）。 */
+  archiveSize: number;
 }
 
 /** coevolveXq の結果。 */
@@ -212,11 +252,13 @@ export interface CoevolveResult {
   /** 各 round の素データ（昇格判定・challenger 勝率・その時点 champion）。 */
   rounds: CoevoRound[];
   /**
-   * champion 勝率の推移（整形済み）。各 round で「昇格したら新 champion の勝率（=challengerWinRate）、
-   * 昇格しなければ 0.5（互角＝据え置き champion の自己対戦中位）」を並べた配列。
-   * 「champion がどれだけ強くなっていったか」の単調傾向を読むための系列。
+   * champion 勝率の推移（整形済み）。各 round で「昇格したら新 champion の殿堂平均勝率
+   * （=archiveWinRate）、昇格しなければ 0.5（互角＝据え置き champion の自己対戦中位）」を
+   * 並べた配列。「champion がどれだけ強くなっていったか」の単調傾向を読むための系列。
    */
   trajectory: number[];
+  /** 最終的な殿堂（Hall of Fame）= 保持している過去 champion 群（直近優先・末尾が最新）。 */
+  archive: Params[];
   /** 提出物（champion_params.json）を書いたパス（書いていなければ undefined）。 */
   submissionPath?: string;
 }
@@ -229,10 +271,11 @@ export interface CoevolveResult {
  * - 昇格しなかった round は 0.5（champion 据え置き＝互角に押し返した＝自己対戦中位）を載せる。
  *
  * これにより「champion がどの round で・どれだけ勝ち越して交代したか」が系列で読める
- * （>0.5 のスパイク＝世代交代、0.5 ＝防衛）。
+ * （>0.5 のスパイク＝世代交代、0.5 ＝防衛）。昇格は殿堂平均勝率で判定するので、スパイク値も
+ * archiveWinRate（過去 champion 群への総合的な勝ち越し）を採る。
  */
 export function summarizeTrajectory(rounds: readonly CoevoRound[]): number[] {
-  return rounds.map((r) => (r.promoted ? r.challengerWinRate : 0.5));
+  return rounds.map((r) => (r.promoted ? r.archiveWinRate : 0.5));
 }
 
 /**
@@ -354,6 +397,20 @@ export interface CoevolveOptions {
    */
   promoteMargin?: number;
   /**
+   * 殿堂（Hall of Fame）サイズ = 昇格判定で対戦する過去 champion の保持上限。既定 4。
+   * 最良 challenger は「直近 champion に勝つ」だけでなく「保持中の過去 champion 群への平均勝率が
+   * 0.5+margin を超える」ことを要求され、循環的な後退（intransitivity drift）を抑える。
+   * 0 にすると殿堂無効＝直近 champion だけで戦う旧挙動に縮退する。
+   * exactOptionalPropertyTypes: 値があるときだけ渡す。
+   */
+  archiveSize?: number;
+  /**
+   * 殿堂評価の並行度（best challenger を各殿堂メンバーに対し並行 spawn する上限）。既定 4。
+   * 各メンバー評価は独立 Python プロセスで I/O 律速なので並行化で壁時計を縮める（parallelEval）。
+   * exactOptionalPropertyTypes: 値があるときだけ渡す。
+   */
+  archiveConcurrency?: number;
+  /**
    * 提出物（champion_params.json）の書き出し先 dir。既定 quests/xq-7narabe。
    * 書き出しを抑止したいテスト等は writeSubmission:false を使う。
    * exactOptionalPropertyTypes: 値があるときだけ渡す。
@@ -389,10 +446,13 @@ function roundSeed(baseSeed: number, round: number): number {
  *
  * 各 round:
  *   1. 現 champion を相手に「challenger を勝率最大化」する探索を populationGA で回す
- *      （fitness = evalFn(challenger, champion, seed)＝対 champion の順位点勝率）。
- *   2. 最良 challenger を champion に対して**再評価**（探索 fitness と同条件・seed 固定で
- *      bit 一致するので追加 spawn は最小限）。
- *   3. shouldPromote（win_rate > 0.5 + promoteMargin）なら champion を交代（世代交代）。
+ *      （fitness = evalFn(challenger, champion, seed)＝対 champion の順位点勝率）。探索の
+ *      勾配は直近 champion で取る（強いシグナル・spawn 最小）。
+ *   2. 最良 challenger を**殿堂（Hall of Fame）= 保持中の過去 champion 群**それぞれに対して
+ *      並行評価し、平均勝率（archiveWinRate）を取る（昇格ゲートを多様な相手に広げる）。
+ *   3. shouldPromote（archiveWinRate > 0.5 + promoteMargin）なら champion を交代し、新 champion を
+ *      殿堂に追加（上限 archiveSize で直近優先に間引く）。これにより「直近にだけ勝つが古い強者に
+ *      負ける」循環的後退を弾き、実測 drift（対 medium 微減）を抑える。
  *   4. round の素データを記録。
  * 最後に推移を整形して返し、最終 champion を champion_params.json に書く。
  *
@@ -407,6 +467,8 @@ export async function coevolveXq(opts: CoevolveOptions): Promise<CoevolveResult>
   const generations = Math.max(0, Math.trunc(opts.generations));
   const games = Math.max(1, Math.trunc(opts.games));
   const promoteMargin = opts.promoteMargin ?? 0.02;
+  const archiveSize = Math.max(0, Math.trunc(opts.archiveSize ?? 4));
+  const archiveConcurrency = Math.max(1, Math.trunc(opts.archiveConcurrency ?? 4));
   const timeoutMs = opts.timeoutMs ?? 60_000;
   const writeSub = opts.writeSubmission ?? true;
   const submissionDir = opts.submissionDir ?? join(process.cwd(), CHAMPION_DIR_REL);
@@ -422,6 +484,9 @@ export async function coevolveXq(opts: CoevolveOptions): Promise<CoevolveResult>
     });
 
   let champion: Params = { ...initialChampion };
+  // 殿堂（Hall of Fame）: 過去 champion 群。初期 champion を起点に入れる
+  // （archiveSize=0 のときは空＝直近 champion だけで戦う旧挙動に縮退）。
+  let archive: Params[] = capArchive([{ ...champion }], archiveSize);
   const roundRecords: CoevoRound[] = [];
 
   for (let r = 1; r <= rounds; r++) {
@@ -429,7 +494,7 @@ export async function coevolveXq(opts: CoevolveOptions): Promise<CoevolveResult>
     // この round の champion を固定参照（探索中は据え置き＝challenger だけが動く）。
     const frozenChampion: Params = { ...champion };
 
-    // populationGA で challenger を frozenChampion に対して勝率最大化。
+    // populationGA で challenger を frozenChampion に対して勝率最大化（探索の勾配は直近で取る）。
     // evaluate に「候補 → 対 champion 勝率」を渡す（GA は fitness スカラしか見ない）。
     const gaResult = await populationGA(
       (challenger: Params) => evalFn(challenger, frozenChampion, rSeed),
@@ -441,20 +506,38 @@ export async function coevolveXq(opts: CoevolveOptions): Promise<CoevolveResult>
       },
     );
 
-    // 最良 challenger を champion に対して再評価（探索と同 seed＝bit 一致するが、契約として
-    // 明示的に「昇格判定用の勝率」を取り直す。決定的なので gaResult.bestScore と一致する）。
+    // 探索 fitness（対 frozenChampion 勝率）。決定的なので gaResult.bestScore と一致する。
     const challengerWinRate = await evalFn(gaResult.best, frozenChampion, rSeed);
 
-    const promoted = shouldPromote(challengerWinRate, promoteMargin);
+    // 昇格ゲート: 最良 challenger を殿堂の各メンバーに対して並行評価し、平均勝率を取る。
+    // 殿堂が空（archiveSize=0）のときは latest（frozenChampion）への勝率にフォールバック。
+    let archiveWinRate: number;
+    if (archive.length === 0) {
+      archiveWinRate = challengerWinRate;
+    } else {
+      // メンバーごとに seed を派生（同一 challenger でも相手別の対戦系列にする＝決定的）。
+      const rates = await mapConcurrent(
+        archive,
+        (member, i) => evalFn(gaResult.best, member, (rSeed + i * 0x9e3779b1) >>> 0),
+        archiveConcurrency,
+      );
+      archiveWinRate = meanWinRate(rates);
+    }
+
+    const promoted = shouldPromote(archiveWinRate, promoteMargin);
     if (promoted) {
       champion = { ...gaResult.best };
+      // 新 champion を殿堂へ（上限で直近優先に間引く）。次 round 以降の昇格相手が増える。
+      archive = capArchive([...archive, { ...champion }], archiveSize);
     }
 
     roundRecords.push({
       round: r,
       challengerWinRate,
+      archiveWinRate,
       promoted,
       champion: { ...champion },
+      archiveSize: archive.length,
     });
   }
 
@@ -464,6 +547,7 @@ export async function coevolveXq(opts: CoevolveOptions): Promise<CoevolveResult>
     champion: { ...champion },
     rounds: roundRecords,
     trajectory,
+    archive,
   };
 
   if (writeSub) {

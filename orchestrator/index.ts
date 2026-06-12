@@ -71,9 +71,17 @@ async function main(): Promise<void> {
       const popSize = Number(getOpt("popSize") ?? 6);
       const generations = Number(getOpt("generations") ?? 4);
       const games = Number(getOpt("games") ?? 60);
-      const res = await coevolveXq({ seed, rounds, popSize, generations, games });
+      const archiveOpt = getOpt("archiveSize"); // 殿堂サイズ（過去 champion 保持上限）。未指定は既定 4。
+      const res = await coevolveXq({
+        seed,
+        rounds,
+        popSize,
+        generations,
+        games,
+        ...(archiveOpt !== undefined ? { archiveSize: Number(archiveOpt) } : {}),
+      });
       const promotions = res.rounds.filter((r) => r.promoted).length;
-      console.log(`[coevolve:xq] ${rounds}round / 昇格 ${promotions}回`);
+      console.log(`[coevolve:xq] ${rounds}round / 昇格 ${promotions}回 / 殿堂 ${res.archive.length}体`);
       console.log(`[coevolve] trajectory=${res.trajectory.map((t) => t.toFixed(3)).join(" -> ")}`);
       console.log(`[coevolve] champion → quests/xq-7narabe/champion_params.json`);
       break;
@@ -140,7 +148,7 @@ async function main(): Promise<void> {
       break;
     }
     default:
-      console.error("usage: taikai <probe|run|doctor|status|evolve|experiment|quest|coevolve|loop> [--run-dir <path>] [--quest xq|ai|robo|data] [--ga N] [--rounds N] [--popSize N] [--games N] [--max-rounds N] [--patience N] [--generations N] [--topK N] [--seed N]");
+      console.error("usage: taikai <probe|run|doctor|status|evolve|experiment|quest|coevolve|loop> [--run-dir <path>] [--quest xq|ai|robo|data] [--ga N] [--rounds N] [--popSize N] [--games N] [--archiveSize N] [--max-rounds N] [--patience N] [--generations N] [--topK N] [--seed N]");
       process.exit(2);
   }
 }

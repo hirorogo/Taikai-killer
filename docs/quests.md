@@ -403,25 +403,28 @@ npm run taikai -- coevolve --quest xq [--seed N] [--generations N] [--promote-ma
 
 ### 7.5 現状の限界（正直に）と実測の枠
 
-コオエボリューションは**実装・実走済み**（`taikai coevolve --quest xq`、§7.3 配線済み）。ただし**短い run では固定 fitness を明確には超えない**（実測は下表）。誇張せず限界を明記する。
+コオエボリューションは**実装・実走済み**（`taikai coevolve --quest xq`、§7.3 配線済み）。さらに **Hall of Fame（対戦相手アーカイブ）を実装**し、初期 run で出ていた drift を実測で潰した（下表）。短い run では依然として固定 fitness を劇的には超えないが、誇張せず限界と前進を併記する。
 
 1. **相手が `ai_param` ベースで本番の未知 AI ではない**: self-play coevolution のチャンピオンは結局 `ai_param.py` の 8 係数ヒューリスティック方策である（`make_ai` の係数を変えるだけで、方策の表現力自体は固定）。**本番で同卓する相手の強さ・方策は未知**（§4.3(4-3)）で、`ai_param` 空間内で軍拡競争して強くなっても、その強さが**表現力の天井（8 係数ヒューリスティックで表せる範囲）**を超えることはない。PIMC（§4.2）のような探索ベース方策を相手/候補にできれば天井は上がるが、`ai_mc.py` は未配線で勝ち越し未確立（§4.2）。
 2. **計算量が大きい**: 固定 fitness は 1 候補あたり games 局（既定 100）で済むが、coevolution は **昇格判定のたびに「挑戦者 × チャンピオン（＋アーカイブ）」の対戦**が要り、世代×個体×アーカイブ数ぶん対戦数が乗算で増える。§4.3(4-2) の通り 7並べ 1 局の採点は分オーダーになりうるので、対戦数の爆発は実時間で効く。事前実行＝時間制約なし（§4.1）とはいえ、固定 fitness より桁で重い。
-3. **退行・循環のリスク**（§7.2 注）: 軍拡競争は自動で単調改善しない。忘却・循環・共謀的退化を緩和する仕組み（アーカイブ／マージン／最小対戦数）が効くかは実装して初めて分かる。
-4. **配線済み**: `taikai coevolve --quest xq`（index.ts switch にあり）。固定 fitness の `quest` と並ぶ実走コマンド。
+3. **退行・循環のリスク**（§7.2 注）: 軍拡競争は自動で単調改善しない。忘却・循環・共謀的退化が起きる。→ **Hall of Fame（対戦相手アーカイブ）を実装**して緩和した（`CoevolveOptions.archiveSize`、既定 4）。昇格判定は最新 champion 1 体ではなく**保持中の過去 champion 群への平均勝率**が 0.5+margin を超えることを要求する（`coevolve.ts` の `capArchive`/`meanWinRate`、`mapConcurrent` で並行採点）。「直近にだけ勝つが古い強者に負ける」循環的後退を弾く。実測で初期 run の drift が消えた（下表）。
+4. **配線済み**: `taikai coevolve --quest xq [--archiveSize N]`（index.ts switch にあり）。固定 fitness の `quest` と並ぶ実走コマンド。
 
-**実測（champion_params.json を固定ベンチで再採点。run: rounds=5/popSize=6/generations=3/games=40/seed=42 → 昇格4回）**:
+**実測①（Hall of Fame **なし**の初期 run: rounds=5/popSize=6/generations=3/games=40/seed=42 → 昇格4回）**: 軽い intransitivity が出ていた — 対 random は既定をわずかに上回るが、**対 medium は既定を下回る** drift（相手依存の退行・§7.2 の「忘却・循環」の典型）。これが Hall of Fame 導入の動機。
 
-| 指標 | 固定 fitness 既定 params（§4.3） | coevolution champion（実測） |
-|---|---|---|
-| 対 random win_rate（games=300・seed=0・現物再採点） | 0.752 | **0.763**（わずかに上） |
-| 対 medium win_rate（games=300・seed=0） | 0.480 | **0.458**（わずかに下） |
-| 昇格回数 / 総 round | — | 4 / 5 |
-| trajectory（昇格時の対旧champion勝率） | — | 0.600→0.537→0.550→0.500→0.575（健全な軍拡＝僅差で上回り続ける） |
-| 退行（intransitivity）有無 | — | **有**（random に強く medium に弱い＝相手に依存した drift） |
+**実測②（Hall of Fame **あり**の run: rounds=8/popSize=8/generations=5/games=80/seed=42/archiveSize=4 → 昇格2回・殿堂3体）。champion_params.json を固定ベンチで再採点（seed 12345 と 999 の平均、各 games=400）**:
 
-> **正直な結論**: 短い coevolution run（小 budget）では、強化済み既定 params と**概ね同等**で、明確な上回りはない。むしろ軽い intransitivity（対 random↑/対 medium↓）が出ており、§7.2 の「忘却・循環」の典型。**「coevolution が固定 fitness を超えた」とはまだ言えない。**
-> **堅実な改善の道**: (a) 事前実行＝時間制約なし（§4.1）を活かし rounds/popSize/games を大幅増、(b) **対戦相手アーカイブ（Hall of Fame）** を導入して最新 champion だけでなく過去世代も相手プールに残し drift/忘却を防ぐ（coevolution の定石）。これが次の具体的改善点。
+| 指標 | 既定 params（§4.3） | HoF なし champion | **HoF あり champion** |
+|---|---|---|---|
+| 対 random win_rate（2 seed 平均） | 0.717 | 0.732 | **0.737** |
+| 対 medium win_rate（2 seed 平均） | 0.471 | 0.482 | **0.482** |
+| 対 medium が**既定を下回る** seed | — | あり（初期 run で drift） | **なし（両 seed とも既定以上）** |
+| 対 medium first_place_rate（seed 999） | 0.310 | 0.318 | **0.352** |
+| 昇格回数 / 総 round | — | 4 / 5 | 2 / 8 |
+| trajectory（昇格時の対殿堂平均勝率） | — | — | 0.525→…→0.537（僅差で上回り続ける健全な軍拡） |
+
+> **正直な結論**: 短い coevolution run（小 budget）でも、Hall of Fame ありの champion は **対 random で既定を明確に上回り（0.717→0.737）、対 medium でも既定を下回らない**（初期 run にあった drift が消えた＝両 seed とも medium ≥ 既定、first_place_rate も改善）。一方で対 medium の平均は HoF なしと同値で、**「coevolution が固定 fitness を桁で超えた」とまでは言えない**（誇張しない）。前進は「退行を消して両ベンチで既定以上を安定化」した点。
+> **次の改善余地**: (a) 事前実行＝時間制約なし（§4.1）を活かし rounds/popSize/games/archiveSize を大幅増、(b) PIMC（§4.2）など表現力の高い方策を候補/相手に入れて 8 係数ヒューリスティックの天井（§7.5-1）を上げる。
 
 ---
 
