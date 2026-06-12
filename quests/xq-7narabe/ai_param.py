@@ -10,11 +10,14 @@ make_ai(params: dict) -> action_fn(state) を返す。action_fn は engine.State
   w_blocking         自分が止めると相手が困る境界札を温存（出すと相手の道を開く手を減点）
   w_rank_extreme     A/K 寄り（端ランク）を早めに出す
   w_hold_seven_adj   7 隣接（6/8）を保持して主導権を握る（出すのを抑制＝減点）
-  w_suit_balance     手札が多いスートを優先して捌く（連鎖で一気に減らす）
+  w_suit_balance     手札が多いスートを優先して捌く（連鎖で一気に減らす）。対 random で最も
+                     効く主係数（長いスートから崩すと手札が速く減り上がりが早い）。
   w_pass_reserve     出し惜しみ＝そのスートで自分の最後の出せる札（出すと連鎖が切れ手番を
                      渡す手）を温存して保留する傾向。序盤ほど強く、終盤は緩む。カードごとに
                      値が変わる独立特徴で、blocking（相手開放回避）とは別軸に結線。
-  w_release_urgency  終盤（手札が少ない）ほど出し切りを急ぐ
+  w_release_urgency  終盤（手札が少ない）ほど出し切りを急ぐ + **自分の手札内連鎖**（この札を
+                     出すと同スートの次札も自分が出せる）を優先するテンポ項。連続して捌ける
+                     札を先に出すと手番を保ったまま一気に減らせる（7並べ定石の連鎖温存→放出）。
   w_random_jitter    わずかな探索ノイズ（盤面指紋＋カードから決定的に派生＝同一局面なら再現、
                      別盤面では別ノイズ。盤面非依存で実質効かなかった旧実装を修正）
 
@@ -50,15 +53,26 @@ PARAM_KEYS = (
 
 
 def default_params() -> dict:
-    """2025 既定値（xqAdapter.ts initialCandidate / evaluate.py default_params と同値）。"""
+    """既定値（対 random 勝率を実測で最大化するよう手調整した出発点）。
+
+    旧既定（w_suit_balance=0.2 等）は all-zero を上回る程度の弱い局所点だった。実測スイープ
+    （games=400・seed 0..3 平均、対 random 3 人戦）で **長いスートから捌く（w_suit_balance）/
+    相手の道を開けない（w_blocking）/ 連鎖が切れる最後の外側札を温存（w_pass_reserve）/
+    手札内連鎖を優先して一気に放出（w_release_urgency のテンポ項）** を強めると順位点 fitness が
+    0.643 → 0.742（1 着率 0.50 → 0.63）まで上がることを確認したので、その値を既定にした。
+    これは numericOptimizer/GA の**出発点**でありなお探索余地がある（README の実測表参照）。
+
+    xqAdapter.ts initialCandidate は読むだけ契約（別ファイルなので本既定とは独立に更新する）。
+    キー集合・順序は PARAM_KEYS / xqAdapter.ts paramKeys と 1:1 同順を維持する。
+    """
     return {
         "w_edge_distance": 1.0,
-        "w_blocking": 0.5,
+        "w_blocking": 1.5,
         "w_rank_extreme": 0.3,
         "w_hold_seven_adj": 0.4,
-        "w_suit_balance": 0.2,
-        "w_pass_reserve": 0.1,
-        "w_release_urgency": 0.6,
+        "w_suit_balance": 2.5,
+        "w_pass_reserve": 1.0,
+        "w_release_urgency": 1.2,
         "w_random_jitter": 0.05,
     }
 
@@ -88,6 +102,28 @@ def _opens_for_others(state: State, card: Card, hand) -> int:
     opened = (after - before) - {card}
     # 自分が次に出せる分は連鎖（相手開放ではない）。
     return sum(1 for c in opened if c not in hand)
+
+
+def _has_chain_followup(card: Card, hand) -> float:
+    """この card を出すと、同スートの**外側へ 1 つ進んだ次札も自分が持っている**か。
+
+    7並べでは「出した先の札を自分が続けて出せる」と手番（主導権）を保ったまま一気に手札を
+    減らせる。7 より大きい側なら次は rank+1、小さい側なら rank-1。7 ちょうどは既に場に
+    あるので合法手に現れず判定不要（0 を返す）。返り値 1.0/0.0（決定的・set 非依存）。
+    """
+    rank = card.number.val
+    if rank > START_RANK:
+        nxt = rank + 1
+    elif rank < START_RANK:
+        nxt = rank - 1
+    else:
+        return 0.0
+    if not (1 <= nxt <= 13):
+        return 0.0
+    for c in hand:
+        if c.suit == card.suit and c.number.val == nxt:
+            return 1.0
+    return 0.0
 
 
 def _board_fingerprint(state: State) -> int:
@@ -146,6 +182,13 @@ def _card_score(
     is_last_outlet_in_suit = 1.0 if suit_count == 1 else 0.0
     reserve_pressure = is_last_outlet_in_suit * ((hand_size - 1) / hand_size)
 
+    # w_release_urgency の連鎖テンポ項（カードごとに差がつく＝argmax に効く）:
+    # この札を出すと同スートの次札も自分が出せる（_has_chain_followup=1）なら、手番を保った
+    # まま連続放出できる。終盤の出し切り圧（1/hand_size、手番内は全候補同値）と同じ「速く減らす」
+    # 方向の特徴なので w_release_urgency に束ねる。reserve_pressure（連鎖が切れる手の温存）と
+    # 符号が逆＝序盤は最後の外側札を温存しつつ、続けて出せる札は優先する、で噛み合う。
+    chain_followup = _has_chain_followup(card, hand)
+
     score = (
         p["w_edge_distance"] * edge_distance
         + p["w_rank_extreme"] * rank_extreme
@@ -153,7 +196,7 @@ def _card_score(
         + p["w_suit_balance"] * suit_count
         - p["w_blocking"] * opened
         - p["w_pass_reserve"] * reserve_pressure
-        + p["w_release_urgency"] * (1.0 / hand_size)
+        + p["w_release_urgency"] * (1.0 / hand_size + chain_followup)
         + p["w_random_jitter"] * jitter
     )
     # 端札（A/K）の安全性は rank_extreme（=1.0 になる）で既に表現されるので、

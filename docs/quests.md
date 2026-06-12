@@ -247,6 +247,48 @@ X Quest の題材として**7並べ**（不完全情報・多人数）を最初�
 >
 > したがって §4.2 冒頭の「手動 700 を自動探索で超える」物語の **MC 側裏付けは現状未確立**（評価ハーネス・8 param 探索・席ローテ・本番配線というヒューリスティック側の数値トラックは動いているが、MC プレイヤーの優位は seed 依存で確立していない）。
 
+### 4.3 勝ち筋の現状（実測値・再現コマンド・正直版）
+
+本節は X Quest の「勝ち筋」が**現状どこまで本物か**を、誇張せず実測値と再現コマンドで記録する。正は本節の数値（第三者が同コマンドで bit 一致再現できる）とし、§4.1/§4.2 の物語はこの実測の範囲で読むこと。詳細表は `quests/xq-7narabe/README.md` を参照。実測は 2026-06-13 の現リポジトリ状態（`ai_param.py default_params` が手調整で強化済み・`ai_medium.py` 追加済み）に対するもの。
+
+**(1) `taikai quest --quest xq` が出す params の位置づけ（対 2025 手動値）。**
+`taikai quest --quest xq --seed 42 --generations 15` を実行すると、初期点（`xqAdapter.initialCandidate`：`w_blocking:0.5`・`w_suit_balance:0.2`…＝**2025 優勝の思想を引いた弱い手動既定値**）から `numericOptimizer`（ヒルクライム）が探索し、**initial fitness 0.635 → best fitness 0.740（evals=16, improved=true）** を出す（games=100・3 人卓・対 random、`quests/xq-7narabe/best_params.json` に焼き込み）。
+- 2025 優勝は「PIMC + 手動 SIMULATION_COUNT=700」という**別アーキ（探索本数を手で決め打つ）**。本ハーネスの数値トラックが探索しているのは **PIMC の本数ではなく `ai_param.py` の 8 個のヒューリスティック係数**で、同じ土俵ではない。正直に主張できるのは「**自己対戦の順位点 fitness を使った自動探索が、弱い手動初期点（対 random 0.635）を 0.740 へ自動で引き上げた**」までで、「PIMC 700 という本番強者を超えた」ではない（本番相手＝PIMC は §4.2 の通り未配線）。
+
+**(2) 探索後 best の頑健性 ＋ 重要な不整合（GA が手調整 default に負けている）。**
+GA best（`best_params.json`）と、`ai_param.py` の**手調整済み `default_params()`**（`w_suit_balance:2.5` 等・README が 0.752 と謳う新既定）を、対 random・games=300・seed 0..3 で直接採点した実測:
+
+| 採点 seed | GA-best（best_params.json） | 手調整 default（ai_param） |
+|---|---|---|
+| 0 | 0.717 | 0.752 |
+| 1 | 0.740 | 0.700 |
+| 2 | 0.702 | 0.745 |
+| 3 | 0.722 | 0.757 |
+| **平均** | **0.720** | **0.738** |
+
+→ **現状、自動探索の best（平均 0.720）は手調整 default（平均 0.738）を 4 seed 中 3 seed で下回る**。原因は**配線のズレ**: `xqAdapter.ts` の `initialCandidate`（探索の出発点）が **2025 由来の古い弱い値のまま**（0.635）で、`ai_param.py` 側で後から強化された `default_params()`（0.752）と**同期していない**。GA は弱い出発点から登るので、手で強化済みの default にまだ届かない。`xqAdapter.ts` は共有 .ts（本担当は読むだけ・編集不可）なので、ここでは**事実として正直に記録するに留める**（修正は adapter 担当の領域）。「探索後 0.73／0.74」を**手調整 default を超えた証拠として誇張してはいけない**。
+
+**(3) 事前実行＝時間制約なし → 勝率を上げる道筋。**
+オフラインで好きなだけ回せる以上、伸ばす手は明確: ① `--generations` を上げる（ヒルクライムの近傍評価回数）、② `xqAdapter.evaluate` 既定 `games`（現 100）を増やして fitness 分散を下げる、③ `restartAfter` を効かせて多峰性を脱出、④ 実装済み・未配線の `populationGA.ts`（個体群 GA）に切替えて popSize を上げる、⑤ **何より初期点を手調整 default に合わせ直す**（(2) の不整合解消が最優先・最大効果）。⑤ を直すだけで GA は 0.738 起点で 0.74+ を狙え、その後 ①〜④ の budget 増が効く。**現状の上限要因は budget 不足ではなく (2) の出発点ズレと (4-1) の評価相手の弱さ**である。
+
+**(4) 現状の限界（正直に三点）。**
+1. **評価器の相手が弱い**: `evaluate.py` の既定対戦相手は `random_action_fn`（ランダム手）。対 random 0.74 は「ランダムに強い」だけで本番の強い相手 AI への強さを保証しない。より手応えのある相手として `ai_medium.py`（固定中級ヒューリスティック）が追加され `--vs medium` で測れるが、**現既定 params の対 medium win_rate は 0.48（1 着率 0.323 ≒ 1/3）で拮抗どまり**＝強い相手には勝ち越せていない。`taikai quest` の本経路は対 random 固定で、medium を fitness にした探索は未配線。
+2. **MC（簡易 PIMC）が 3 人卓で 0.5 を確立的には超えない**: `evaluate_mc.py`（既定 params・対ヒューリスティック ×2 の 3 人卓・MC が最強候補のはず）の win_rate は **seed・sim_count に依存して 0.35〜0.57 に揺れ、単調でも安定 > 0.5 でもない**（games=30・seed=0 の実測で sim_count を上げても単調増加しない／games=20・seed=0・sim=150 で 0.35 まで沈む点もある）。「手単位では MC がヒューリスティックを上回る」検証はあるが、3 人卓の literal 勝率では「最強候補だが > 0.5 を安定保証できない」。`ai_mc.py`／`evaluate_mc.py` の docstring・README が掲げる「sim_count を上げれば単調に伸び明確に勝ち越す」は**過大**で、実測は非単調・seed 依存（§4.2 と整合）。
+3. **本番の相手 AI が未知**: 本番で同卓する相手の強さ・方策は未知。現評価器（対 random／対自己ヒューリスティック／対 medium）はそのプロキシに過ぎず、本番勝率は本節の数値からは保証されない。**勝ち筋として確立しているのは「自動探索ループが弱い初期点を対 random で 0.635→0.740 へ自動改善する」配線と再現性まで**。その先（手調整 default 超え・強い相手超え・本番強者超え）は (2)(4-1) の通り**未確立**。
+
+再現コマンド（すべて決定的・bit 一致）:
+```bash
+# (1) 自動探索（initial 0.635 → best 0.740, evals=16）
+npm run taikai -- quest --quest xq --seed 42 --generations 15
+# (2) GA-best と手調整 default を直接採点（seed を変えて比較。GA-best が default に負ける seed がある）
+python -c "import json;print(json.dumps({'params':json.load(open('quests/xq-7narabe/best_params.json')),'games':300,'seed':0,'opponents':2}))" | python quests/xq-7narabe/evaluate.py
+echo '{"params":{},"games":300,"seed":0,"opponents":2}' | python quests/xq-7narabe/evaluate.py
+# (4-1) 強い相手（固定中級ヒューリスティック）相手の既定 params 勝率（拮抗 0.48）
+echo '{"params":{},"games":300,"seed":0,"vs":"medium"}' | python quests/xq-7narabe/evaluate.py
+# (4-2) MC の対ヒューリスティック勝率（seed・sim_count で 0.35〜0.57 に揺れる）
+echo '{"params":{},"games":30,"seed":0,"sim_count":100}' | python quests/xq-7narabe/evaluate_mc.py
+```
+
 ---
 
 ## 5. 評価器の規約（横断共通）

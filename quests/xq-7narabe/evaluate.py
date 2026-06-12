@@ -3,7 +3,7 @@
 
 役割（TS 側 orchestrator/quest/xqAdapter.ts の evaluate と 1:1 の契約）:
   stdin で 1 行 JSON {params, games, seed, opponents} を受け取り、make_ai(params) の
-  候補プレイヤーを **実ゲームエンジン engine.py** 上で対 random 相手と `games` 局戦わせ、
+  候補プレイヤーを **実ゲームエンジン engine.py** 上で対戦相手と `games` 局戦わせ、
   候補の **順位点 fitness** を 1 行 JSON で stdout に返す。診断は stderr。
 
 入力 (stdin, 1 行 JSON):
@@ -11,10 +11,16 @@
     "params":   {"w_edge_distance": 1.2, ...},  # ai_param のチューニング値（部分可）
     "games":    100,                             # 評価局数（>=1、既定 100）
     "seed":     0,                               # 乱数 seed（決定性の要、既定 0）
-    "opponents":2                                # 候補以外の random 相手数（既定 2 = 3 人戦）
+    "opponents":2,                               # 候補以外の相手数（既定 2 = 3 人戦）
+    "vs":       "random"                         # 相手の種別（"random" 既定 / "medium"）
   }
   ※ opponents は「候補以外の人数」。本エンジンは 3 人戦なので opponents=2 が標準。
     互換のため任意 int を受けるが players_num = opponents + 1 にクランプして使う。
+  ※ vs（または CLI の --vs random|medium）で相手 AI を切り替える:
+      - "random": 出せる手から一様ランダム（既定・xqAdapter.ts の最適化契約はこちら）。
+      - "medium": 固定の中級ヒューリスティック ai_medium.make_medium（random より明確に強い
+        ベンチマーク相手）。候補が中級相手に勝ち越せるか（win_rate / first_place_rate）を測る。
+    payload の "vs" と CLI の --vs が両方あれば CLI を優先する。後方互換: vs 省略時は random。
 
 出力 (stdout, 1 行 JSON):
   {"win_rate": 0.52, "first_place_rate": 0.33, "avg_rank": 1.9, "games": 100}
@@ -48,12 +54,30 @@ import json
 import random
 import sys
 
+from ai_medium import make_medium
 from ai_param import make_ai
 from engine import play_table, random_action_fn
 
 _GAMES_DEFAULT = 100
 _SEED_DEFAULT = 0
 _OPPONENTS_DEFAULT = 2  # 候補以外の人数（3 人戦）。
+_VS_DEFAULT = "random"  # 相手種別（"random" | "medium"）。
+_VS_KINDS = ("random", "medium")
+
+
+def _opponent_factory(vs: str):
+    """相手種別 vs → 「seed 付き rng を受け action_fn を返す」ファクトリ。決定的。
+
+    - "random": engine.random_action_fn（出せる手から一様）。
+    - "medium": ai_medium.make_medium（固定中級ヒューリスティック・rng は API 互換で受け捨て）。
+    未知種別は random にフォールバック（黙って既定で進めない方針だが、評価器は止めずに
+    既定相手で続行する＝最適化ループを止めないため。stderr に警告は出す）。
+    """
+    if vs == "medium":
+        return lambda rng: make_medium(seed=None)
+    if vs != "random":
+        sys.stderr.write(f"evaluate.py: unknown vs={vs!r}, falling back to random\n")
+    return lambda rng: random_action_fn(rng)
 
 
 def _rank_point(rank_1based: int, players_num: int) -> float:
@@ -63,16 +87,22 @@ def _rank_point(rank_1based: int, players_num: int) -> float:
     return (players_num - rank_1based) / (players_num - 1)
 
 
-def evaluate(params: dict, games: int, seed: int, opponents: int) -> dict:
-    """make_ai(params) を実エンジンで対 random×opponents、games 局戦わせ順位点 fitness を返す。決定的。
+def evaluate(
+    params: dict, games: int, seed: int, opponents: int, vs: str = _VS_DEFAULT
+) -> dict:
+    """make_ai(params) を実エンジンで対 vs×opponents、games 局戦わせ順位点 fitness を返す。決定的。
 
     旧実装は「最初の上がり者か否か」の二値勝率だったが（3 人戦で上限 0.333 に張り付き候補の
     識別力が弱い）、docs/quests.md §4.1 に従い **平均着順を順位点 [0,1] に加重した連続 fitness**
     にする。literal な 1 着率（first_place_rate）と平均着順（avg_rank）も診断用に併記する。
+
+    vs で相手 AI を切り替える（"random" 既定 / "medium" = 固定中級ヒューリスティック）。
+    相手の決定化シードは (seed, g) から派生し vs に依らず同列（同 seed なら配り・相手とも再現）。
     """
     n_games = max(1, int(games))
     n_opp = max(1, int(opponents))
     players_num = n_opp + 1
+    opp_make = _opponent_factory(vs)
 
     ai_fn = make_ai(params, seed=seed)
 
@@ -83,7 +113,7 @@ def evaluate(params: dict, games: int, seed: int, opponents: int) -> dict:
     for g in range(n_games):
         deal_seed = seed + g
         seat = g % players_num  # 候補の着席位置（席順バイアス除去）。
-        # 相手 random の種を (seed, g) から決定的に導出。
+        # 相手の種を (seed, g) から決定的に導出（medium も同列 rng を受けて API 互換）。
         opp_rng = random.Random((seed * 1_000_003) ^ (g + 1))
 
         fns = []
@@ -91,7 +121,7 @@ def evaluate(params: dict, games: int, seed: int, opponents: int) -> dict:
             if seat_idx == seat:
                 fns.append(ai_fn)
             else:
-                fns.append(random_action_fn(random.Random(opp_rng.randrange(1 << 30))))
+                fns.append(opp_make(random.Random(opp_rng.randrange(1 << 30))))
 
         # play_table は着順（席 index の決着順）を返す。候補席の 1-based 着順を採点する。
         finish_order = play_table(fns, seed=deal_seed, players_num=players_num)
@@ -107,7 +137,25 @@ def evaluate(params: dict, games: int, seed: int, opponents: int) -> dict:
         "first_place_rate": first_places / n_games,  # literal な 1 着率（診断）。
         "avg_rank": rank_sum / n_games,           # 平均着順（診断、1=最良）。
         "games": n_games,
+        "vs": vs,                                 # 対戦相手種別（診断）。
     }
+
+
+def _parse_cli_vs(argv: list) -> "str | None":
+    """argv から --vs <kind> / --vs=<kind> を読む（無ければ None）。最後の指定を採用。"""
+    vs: "str | None" = None
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a == "--vs":
+            if i + 1 < len(argv):
+                vs = argv[i + 1]
+                i += 2
+                continue
+        elif a.startswith("--vs="):
+            vs = a[len("--vs="):]
+        i += 1
+    return vs
 
 
 def main() -> int:
@@ -131,8 +179,16 @@ def main() -> int:
     seed = req.get("seed", _SEED_DEFAULT)
     opponents = req.get("opponents", _OPPONENTS_DEFAULT)
 
+    # vs: CLI --vs を最優先、無ければ payload "vs"、無ければ既定 random。
+    cli_vs = _parse_cli_vs(sys.argv[1:])
+    vs = cli_vs if cli_vs is not None else req.get("vs", _VS_DEFAULT)
+    vs = str(vs)
+    if vs not in _VS_KINDS:
+        sys.stderr.write(f"evaluate.py: unknown vs={vs!r}; using random\n")
+        vs = _VS_DEFAULT
+
     try:
-        result = evaluate(params, int(games), int(seed), int(opponents))
+        result = evaluate(params, int(games), int(seed), int(opponents), vs)
     except Exception as e:  # noqa: BLE001 — 致命時は非 0 終了（TS 側が低 fitness 化）
         sys.stderr.write(f"evaluate.py: evaluation failed: {type(e).__name__}: {e}\n")
         return 1

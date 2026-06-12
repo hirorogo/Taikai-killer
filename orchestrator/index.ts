@@ -102,9 +102,15 @@ async function main(): Promise<void> {
       }
       const generations = Number(getOpt("generations") ?? 15);
       const seed = Number(getOpt("seed") ?? 42);
+      const gaPop = getOpt("ga"); // --ga N で本格GA（popSize=N）。未指定はヒルクライム。
       const init = await adapter.evaluate(adapter.initialCandidate());
-      console.log(`[quest:${adapter.questId}] initial fitness=${init.toFixed(3)}`);
-      const res = await runQuest(adapter, { seed, generations, submissionDir: subDir });
+      console.log(`[quest:${adapter.questId}] initial fitness=${init.toFixed(3)}${gaPop ? ` (GA pop=${gaPop})` : ""}`);
+      const res = await runQuest(adapter, {
+        seed,
+        generations,
+        submissionDir: subDir,
+        ...(gaPop ? { gaPopSize: Number(gaPop) } : {}),
+      });
       console.log(
         `[quest] best fitness=${res.bestScore.toFixed(3)} (evals=${res.evaluations}, improved=${res.bestScore >= init})`,
       );
