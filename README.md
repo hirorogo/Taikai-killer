@@ -138,7 +138,7 @@ npm run taikai -- quest --quest data  # Data Quest: 特徴選択 12 パラメー
 | Robo（制御） | `robo` | 5 制御ゲイン（kp_lin/kp_ang/kd_ang/align_thresh/v_cruise） | 2輪到達シミュの多エピソード平均報酬 | `quests/robo-control/evaluate.py` |
 | Data（分析） | `data` | 特徴選択 12 パラメータ（sel_0..sel_9＋sel_threshold＋ridge） | 合成テーブルの held-out 予測 R^2（リーク無し） | `quests/data-insight/evaluate.py` |
 
-各 `quests/<id>/evaluate.py` は**評価本体**（外部データ・物理エンジンに依存しない自己完結サイドカー）。TS アダプタは spawn して stdin に 1 行 JSON を渡し、stdout の fitness を読むだけ。4 つとも seed 固定で bit 一致する決定的評価器。実測（同一フレームワーク・seed 固定）— X: 既定 0.62 → 探索後 0.73 / AI: 0.475 → 0.717 / Robo: 0.813 → 0.922。Data は held-out R^2 に明確な勾配（特徴未選択 ≈ 0 → 真に効く 4 列を選ぶと ≈ 0.97）があり、数値の正は [`quests/data-insight/README`](./quests/data-insight/README.md)。
+各 `quests/<id>/evaluate.py` は**評価本体**（外部データ・物理エンジンに依存しない自己完結サイドカー）。TS アダプタは spawn して stdin に 1 行 JSON を渡し、stdout の fitness を読むだけ。4 つとも seed 固定で bit 一致する決定的評価器。実測（同一フレームワーク・seed 固定。数値の正は焼き込み済み `best_params.json` の再採点値）— X: 初期点 0.635 → 焼き込み best 0.750（games=100・seed=0・対 random・現 `best_params.json` 再採点で bit 一致。なお対 random 0.750 は手調整 default 0.752 とほぼ拮抗で超過ではない） / AI: 0.475 → 0.717 / Robo: 0.813 → 0.922。Data は held-out R^2 に明確な勾配（特徴未選択 ≈ 0 → 真に効く 4 列を選ぶと ≈ 0.97）があり、数値の正は [`quests/data-insight/README`](./quests/data-insight/README.md)。
 
 実装済みは数値トラック（X/AI/Robo/Data の 4 クエスト）。**未実装**は AI/Robo/Data の LLM approach／コード変異ループと X の PIMC 探索プレイヤー（現 X はパラメータ化ヒューリスティック）。本格 GA（個体群＋交叉＋エリート保存）は `orchestrator/quest/populationGA.ts` に純ロジックで実装済みだが、各アダプタはヒルクライム経路で配線している。
 

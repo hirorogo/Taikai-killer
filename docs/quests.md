@@ -252,40 +252,47 @@ X Quest の題材として**7並べ**（不完全情報・多人数）を最初�
 本節は X Quest の「勝ち筋」が**現状どこまで本物か**を、誇張せず実測値と再現コマンドで記録する。正は本節の数値（第三者が同コマンドで bit 一致再現できる）とし、§4.1/§4.2 の物語はこの実測の範囲で読むこと。詳細表は `quests/xq-7narabe/README.md` を参照。実測は 2026-06-13 の現リポジトリ状態（`ai_param.py default_params` が手調整で強化済み・`ai_medium.py` 追加済み）に対するもの。
 
 **(1) `taikai quest --quest xq` が出す params の位置づけ（対 2025 手動値）。**
-`taikai quest --quest xq --seed 42 --generations 15` を実行すると、初期点（`xqAdapter.initialCandidate`：`w_blocking:0.5`・`w_suit_balance:0.2`…＝**2025 優勝の思想を引いた弱い手動既定値**）から `numericOptimizer`（ヒルクライム）が探索し、**initial fitness 0.635 → best fitness 0.740（evals=16, improved=true）** を出す（games=100・3 人卓・対 random、`quests/xq-7narabe/best_params.json` に焼き込み）。
-- 2025 優勝は「PIMC + 手動 SIMULATION_COUNT=700」という**別アーキ（探索本数を手で決め打つ）**。本ハーネスの数値トラックが探索しているのは **PIMC の本数ではなく `ai_param.py` の 8 個のヒューリスティック係数**で、同じ土俵ではない。正直に主張できるのは「**自己対戦の順位点 fitness を使った自動探索が、弱い手動初期点（対 random 0.635）を 0.740 へ自動で引き上げた**」までで、「PIMC 700 という本番強者を超えた」ではない（本番相手＝PIMC は §4.2 の通り未配線）。
+`taikai quest --quest xq --seed 42 --generations 15` を実行すると、初期点（`xqAdapter.initialCandidate`：`w_blocking:0.5`・`w_suit_balance:0.2`…＝**2025 優勝の思想を引いた弱い手動既定値**）から `numericOptimizer`（ヒルクライム）が探索し、探索済み best を `quests/xq-7narabe/best_params.json` に焼き込む（games=100・3 人卓・対 random）。**数値の正は焼き込み済み `best_params.json` を同一サイドカーで再採点した値**とする（TS orchestrator 経路は本節の範囲外で run の seed/generations を本文では確定できないため、本文に書く数値は run ログでなく**現物 `best_params.json` の再採点値**で固定する）。現 `best_params.json` を `evaluate.py` で**games=100・seed=0・対 random**で再採点すると **win_rate 0.750**、同条件の初期点 `initialCandidate` は **0.635**（＝**initial 0.635 → 焼き込み best 0.750**、下の再現コマンド (1') で bit 一致）。「自動探索が弱い初期点を引き上げた」と言えるのはこの差分まで。
+- 2025 優勝は「PIMC + 手動 SIMULATION_COUNT=700」という**別アーキ（探索本数を手で決め打つ）**。本ハーネスの数値トラックが探索しているのは **PIMC の本数ではなく `ai_param.py` の 8 個のヒューリスティック係数**で、同じ土俵ではない。正直に主張できるのは「**自己対戦の順位点 fitness を使った自動探索が、弱い手動初期点（対 random 0.635）を 0.750 へ自動で引き上げた**」（games=100・seed=0・現 `best_params.json` 再採点）までで、「PIMC 700 という本番強者を超えた」ではない（本番相手＝PIMC は §4.2 の通り未配線）。
 
-**(2) 探索後 best の頑健性 ＋ 重要な不整合（GA が手調整 default に負けている）。**
-GA best（`best_params.json`）と、`ai_param.py` の**手調整済み `default_params()`**（`w_suit_balance:2.5` 等・README が 0.752 と謳う新既定）を、対 random・games=300・seed 0..3 で直接採点した実測:
+**(2) 探索後 best の頑健性 ＋ 重要な不整合（GA が手調整 default を超えていない）。**
+現 GA best（`quests/xq-7narabe/best_params.json` — `w_suit_balance:1.23`・`w_release_urgency:1.14` 等を焼き込んだ現物。下表はこの**コミット済み現物**を再採点したもの）と、`ai_param.py` の**手調整済み `default_params()`**（`w_suit_balance:2.5` 等・README が 0.752 と謳う新既定）を、対 random・games=300・seed 0..3 で直接採点した実測（2026-06-13 の現リポジトリ状態）:
 
-| 採点 seed | GA-best（best_params.json） | 手調整 default（ai_param） |
-|---|---|---|
-| 0 | 0.717 | 0.752 |
-| 1 | 0.740 | 0.700 |
-| 2 | 0.702 | 0.745 |
-| 3 | 0.722 | 0.757 |
-| **平均** | **0.720** | **0.738** |
+| 採点 seed | GA-best（現 best_params.json） | 手調整 default（ai_param） | 勝敗 |
+|---|---|---|---|
+| 0 | 0.745 | 0.752 | default |
+| 1 | 0.712 | 0.700 | GA |
+| 2 | 0.745 | 0.745 | 同点 |
+| 3 | 0.742 | 0.757 | default |
+| **平均** | **0.736** | **0.738** | ほぼ拮抗 |
 
-→ **現状、自動探索の best（平均 0.720）は手調整 default（平均 0.738）を 4 seed 中 3 seed で下回る**。原因は**配線のズレ**: `xqAdapter.ts` の `initialCandidate`（探索の出発点）が **2025 由来の古い弱い値のまま**（0.635）で、`ai_param.py` 側で後から強化された `default_params()`（0.752）と**同期していない**。GA は弱い出発点から登るので、手で強化済みの default にまだ届かない。`xqAdapter.ts` は共有 .ts（本担当は読むだけ・編集不可）なので、ここでは**事実として正直に記録するに留める**（修正は adapter 担当の領域）。「探索後 0.73／0.74」を**手調整 default を超えた証拠として誇張してはいけない**。
+→ **現状、自動探索の best（平均 0.736）は手調整 default（平均 0.738）と平均でほぼ拮抗（差 0.002）し、seed 別では 2 勝（default seed0,3）/ 1 勝（GA seed1）/ 1 分（seed2）**。GA は default を**明確には超えていない**（拮抗どまりで、依然 default 優位の seed が残る）。原因は**配線のズレ**: `xqAdapter.ts` の `initialCandidate`（探索の出発点）が **2025 由来の古い弱い値のまま**（games=100・seed=0 で 0.635）で、`ai_param.py` 側で後から強化された `default_params()`（同条件 0.752）と**同期していない**。GA は弱い出発点から登るので、手で強化済みの default をまだ確実には抜けない。`xqAdapter.ts` は共有 .ts（本担当は読むだけ・編集不可）なので、ここでは**事実として正直に記録するに留める**（initialCandidate の同期修正は adapter 担当の領域）。「探索後 0.74」を**手調整 default を超えた証拠として誇張してはいけない**（実測は拮抗で、超過は未確立）。なお下表の数値は再現コマンド (2) で現 `best_params.json` を再採点すれば bit 一致する。表を更新するときは `best_params.json` も同時に commit して整合させること。
 
 **(3) 事前実行＝時間制約なし → 勝率を上げる道筋。**
 オフラインで好きなだけ回せる以上、伸ばす手は明確: ① `--generations` を上げる（ヒルクライムの近傍評価回数）、② `xqAdapter.evaluate` 既定 `games`（現 100）を増やして fitness 分散を下げる、③ `restartAfter` を効かせて多峰性を脱出、④ 実装済み・未配線の `populationGA.ts`（個体群 GA）に切替えて popSize を上げる、⑤ **何より初期点を手調整 default に合わせ直す**（(2) の不整合解消が最優先・最大効果）。⑤ を直すだけで GA は 0.738 起点で 0.74+ を狙え、その後 ①〜④ の budget 増が効く。**現状の上限要因は budget 不足ではなく (2) の出発点ズレと (4-1) の評価相手の弱さ**である。
 
 **(4) 現状の限界（正直に三点）。**
 1. **評価器の相手が弱い**: `evaluate.py` の既定対戦相手は `random_action_fn`（ランダム手）。対 random 0.74 は「ランダムに強い」だけで本番の強い相手 AI への強さを保証しない。より手応えのある相手として `ai_medium.py`（固定中級ヒューリスティック）が追加され `--vs medium` で測れるが、**現既定 params の対 medium win_rate は 0.48（1 着率 0.323 ≒ 1/3）で拮抗どまり**＝強い相手には勝ち越せていない。`taikai quest` の本経路は対 random 固定で、medium を fitness にした探索は未配線。
-2. **MC（簡易 PIMC）が 3 人卓で 0.5 を確立的には超えない**: `evaluate_mc.py`（既定 params・対ヒューリスティック ×2 の 3 人卓・MC が最強候補のはず）の win_rate は **seed・sim_count に依存して 0.35〜0.57 に揺れ、単調でも安定 > 0.5 でもない**（games=30・seed=0 の実測で sim_count を上げても単調増加しない／games=20・seed=0・sim=150 で 0.35 まで沈む点もある）。「手単位では MC がヒューリスティックを上回る」検証はあるが、3 人卓の literal 勝率では「最強候補だが > 0.5 を安定保証できない」。`ai_mc.py`／`evaluate_mc.py` の docstring・README が掲げる「sim_count を上げれば単調に伸び明確に勝ち越す」は**過大**で、実測は非単調・seed 依存（§4.2 と整合）。
-3. **本番の相手 AI が未知**: 本番で同卓する相手の強さ・方策は未知。現評価器（対 random／対自己ヒューリスティック／対 medium）はそのプロキシに過ぎず、本番勝率は本節の数値からは保証されない。**勝ち筋として確立しているのは「自動探索ループが弱い初期点を対 random で 0.635→0.740 へ自動改善する」配線と再現性まで**。その先（手調整 default 超え・強い相手超え・本番強者超え）は (2)(4-1) の通り**未確立**。
+2. **MC（簡易 PIMC）が 3 人卓で 0.5 を確立的には超えない**: `evaluate_mc.py`（既定 params・対ヒューリスティック ×2 の 3 人卓・MC が最強候補のはず）の win_rate は **seed・sim_count に依存して概ね 0.35〜0.53 に揺れ、単調でも安定 > 0.5 でもない**（games=30・seed=0 の 2026-06-13 再測で sim_count=10/30/100/200 が 0.500/0.500/0.400/0.433 と非単調・高 budget でも 0.5 割れ／games=20・seed=0・sim=150 で 0.35 まで沈む点もある。1 点が分オーダーで再測コスト大。値は単一 seed の一例・分散大）。「手単位では MC がヒューリスティックを上回る」検証はあるが、3 人卓の literal 勝率では「最強候補だが > 0.5 を安定保証できない」。`ai_mc.py`／`evaluate_mc.py` の docstring・README が掲げる「sim_count を上げれば単調に伸び明確に勝ち越す」は**過大**で、実測は非単調・seed 依存（§4.2 と整合）。
+3. **本番の相手 AI が未知**: 本番で同卓する相手の強さ・方策は未知。現評価器（対 random／対自己ヒューリスティック／対 medium）はそのプロキシに過ぎず、本番勝率は本節の数値からは保証されない。**勝ち筋として確立しているのは「自動探索ループが弱い初期点を対 random で 0.635→0.750 へ自動改善する」配線と再現性まで**（games=100・seed=0・現 `best_params.json` 再採点・(1') で bit 一致）。その先（手調整 default 超え・強い相手超え・本番強者超え）は (2)(4-1) の通り**未確立**（default とは平均で拮抗・超過は未達）。
 
-再現コマンド（すべて決定的・bit 一致）:
+再現コマンド（すべて決定的・bit 一致。数値の正は**現物 `best_params.json` の再採点値**）:
 ```bash
-# (1) 自動探索（initial 0.635 → best 0.740, evals=16）
+# (1) 探索 run 自体（TS orchestrator 経路。best_params.json を書き換える。run の数値は本節の正ではない）
 npm run taikai -- quest --quest xq --seed 42 --generations 15
-# (2) GA-best と手調整 default を直接採点（seed を変えて比較。GA-best が default に負ける seed がある）
-python -c "import json;print(json.dumps({'params':json.load(open('quests/xq-7narabe/best_params.json')),'games':300,'seed':0,'opponents':2}))" | python quests/xq-7narabe/evaluate.py
-echo '{"params":{},"games":300,"seed":0,"opponents":2}' | python quests/xq-7narabe/evaluate.py
+# (1') (1) の主張「initial 0.635 → 焼き込み best 0.750」を現物で再採点（games=100・seed=0・対 random・bit 一致）
+#      初期点 initialCandidate（0.635）:
+echo '{"params":{"w_edge_distance":1.0,"w_blocking":0.5,"w_rank_extreme":0.3,"w_hold_seven_adj":0.4,"w_suit_balance":0.2,"w_pass_reserve":0.1,"w_release_urgency":0.6,"w_random_jitter":0.05},"games":100,"seed":0,"opponents":2}' | python quests/xq-7narabe/evaluate.py
+#      焼き込み best（現 best_params.json, 0.750）:
+python -c "import json;print(json.dumps({'params':json.load(open('quests/xq-7narabe/best_params.json')),'games':100,'seed':0,'opponents':2}))" | python quests/xq-7narabe/evaluate.py
+# (2) GA-best と手調整 default を直接採点（games=300・seed 0..3。§4.3(2) の表を再現＝平均 0.736 vs 0.738 で拮抗）
+for s in 0 1 2 3; do
+  python -c "import json;print(json.dumps({'params':json.load(open('quests/xq-7narabe/best_params.json')),'games':300,'seed':$s,'opponents':2}))" | python quests/xq-7narabe/evaluate.py
+  echo "{\"params\":{},\"games\":300,\"seed\":$s,\"opponents\":2}" | python quests/xq-7narabe/evaluate.py
+done
 # (4-1) 強い相手（固定中級ヒューリスティック）相手の既定 params 勝率（拮抗 0.48）
 echo '{"params":{},"games":300,"seed":0,"vs":"medium"}' | python quests/xq-7narabe/evaluate.py
-# (4-2) MC の対ヒューリスティック勝率（seed・sim_count で 0.35〜0.57 に揺れる）
+# (4-2) MC の対ヒューリスティック勝率（seed・sim_count で 0.35〜0.57 に揺れる。games=30・sim=100 で分オーダー）
 echo '{"params":{},"games":30,"seed":0,"sim_count":100}' | python quests/xq-7narabe/evaluate_mc.py
 ```
 
@@ -321,9 +328,9 @@ echo '{"params":{},"games":30,"seed":0,"sim_count":100}' | python quests/xq-7nar
 > Data=`data-insight/evaluate.py`（特徴選択 12 param・held-out R^2）＋`dataInsightAdapter`。
 > 4 アダプタとも **同一の `QuestAdapter<NumericCandidate>` 契約**で、`runQuest`→`numericOptimizer` を**無改変共有**する
 > （＝本節が主張する「横断ハーネスの汎用性／評価関数を差すだけで自律最適化」が 4 クエストで実達成）。`taikai quest --quest xq|ai|robo|data` で同一コマンドから回せる。
-> 実測（同一フレームワーク・seed 固定）— X: 既定 0.62 → 探索後 0.73、AI: 0.475 → 0.717、Robo: 0.813 → 0.922。
+> 実測（同一フレームワーク・seed 固定）— X: 初期点 0.635 → 焼き込み best 0.750（games=100・seed=0・対 random・現 `best_params.json` 再採点。§4.3(1') で bit 一致）、AI: 0.475 → 0.717、Robo: 0.813 → 0.922。
 > Data は held-out R^2 に明確な勾配（既定 ≈ 0 ＝特徴未選択の定数予測 → 真に効く 4 列だけ選ぶと ≈ 0.97、全列だと 0.79 でノイズ列が過適合）があり、最適化器が特徴選択を進める余地がある（数値は `quests/data-insight/README` を正とする）。
-> **再現性の但し書き**: base 評価器の既定値（X の `evaluate.py` 既定 win_rate ≈ 0.632 など）は seed=0 で第三者が再現確認できる（README の実行例と一致）。一方「探索後 0.73」その他の探索後の数値は **seed・generations が確定して初めて bit 一致再現できる**。第三者再現のためには各実測値に再現コマンド（`npm run taikai -- quest --quest <X|ai|robo|data> --seed <S> --generations <G>`）と、その run が書いた `best_params.json` と整合する seed を併記する必要がある。**正は各 `quests/<id>/README` の再現手順**とし、本文の数値はそれと一致する範囲で読むこと（現状、探索後値の seed/generations は本文未記載＝本文だけでは bit 一致再現不可）。
+> **再現性の但し書き**: 数値の正は **TS run のログではなく、焼き込み済み `quests/<id>/best_params.json` を各サイドカーで再採点した値**とする（run の seed/generations が本文に無くても、現物 `best_params.json` を固定 seed/games で再採点すれば第三者が bit 一致再現できる）。**X（7並べ）はこの方式で本文に固定済み**: 初期点 0.635／焼き込み best 0.750 はいずれも games=100・seed=0・対 random で現物再採点と bit 一致（§4.3 再現コマンド (1')）。GA-best vs default の比較表も games=300・seed 0..3 で現 `best_params.json` を再採点すれば §4.3(2) と一致する。**表や本文の探索後数値を更新するときは `best_params.json` も同時に commit し、再採点で一致する状態を保つこと**（数値だけ先に古くならないようにする）。AI/Robo/Data の探索後値も同様に各 `quests/<id>/README` の再採点コマンドを正とし、`best_params.json` と整合する seed を併記する。
 > N人同卓は `runRoundRobin`（2人専用）ではなく Python エンジン側 self-play で実装した。
 > 一方 **AI/Robo/Data の LLM approach／コード変異ループは未実装**（4 クエストとも数値トラックのみ。本格 GA は `populationGA.ts` に実装済みだがアダプタはヒルクライム配線＝実装済み・未配線）。
 > **X の簡易 PIMC（決定化 MC）プレイヤー `ai_mc.py`／`evaluate_mc.py` は実装済みだが数値トラックに未配線**で、対ヒューリスティック勝ち越しは seed 依存で未確立（§4.2）＝「実装済み・未配線」カテゴリ。
