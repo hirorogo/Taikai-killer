@@ -146,6 +146,12 @@ export interface BenchResult {
   distance?: number;
   diff_vs_prev?: number;
   threshold: { name: string; value: number }[];
+  /**
+   * 来歴（AC6）。result 単体から戦略→要件→ルールまで遡れるよう、この result を生んだ
+   * 戦略 id を derived_from に載せる（戦略 partial の provenance がさらに rubric/要件へ繋がる）。
+   * 後方互換のため optional（既存 result は provenance を持たなくても契約に適合）。
+   */
+  provenance?: Provenance;
 }
 
 /** outputs/leaderboard.json — run 横断の最強選抜（同一 rubric_ref で比較）。 */

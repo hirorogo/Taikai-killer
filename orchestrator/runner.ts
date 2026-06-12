@@ -41,6 +41,7 @@ import type {
   ScoringRubric,
   Strategy,
   CodeAttempt,
+  CodegenResult,
   BenchResult,
   LeaderboardEntry,
   ProjectManifest,
@@ -398,6 +399,28 @@ ${strategy.approach}
   }
   phaseCompleted(runDir, "S5", passed ? "ok" : "partial");
 
+  // CodegenResult 永続化（AC2 / §3-6）: D22 系列の証跡（feedbackHistory）をファイルに残す。
+  // これまで feedbackHistory はローカル変数で消えていた＝reflector 実発火の証跡が outputs に
+  // 残らず AC2 が「メモリ上のみ」だった。S5 の最終結果を契約付きで書き出す。
+  const codegen: CodegenResult = {
+    strategy_id: strategy.id,
+    passed,
+    attempts: feedbackHistory.length,
+    feedbackHistory,
+    ...(lastReflection ? { finalFeedback: lastReflection } : {}),
+  };
+  const cgCheck = validateArtifact("CodegenResult", codegen);
+  if (!cgCheck.valid) console.warn(`[S5] ⚠ CodegenResult 契約に不一致: ${cgCheck.message}`);
+  writePartial<CodegenResult>(
+    runDir,
+    "S5R", // S5 の result（CodeAttempt partial=phase "S5" と衝突しない別タグ）
+    0,
+    0,
+    codegen,
+    prov("S5R", [strategy.id]),
+    passed ? "ok" : "partial",
+  );
+
   // ── S6 ベンチマーク（test型 / 改変検知）──
   phaseStarted(runDir, "S6");
   console.log("[S6] 採点…");
@@ -420,6 +443,9 @@ ${strategy.approach}
     metrics: { passed_test_ratio: ratio },
     passed_test_ratio: ratio,
     threshold: [],
+    // AC6: result 単体から戦略→要件→ルールまで遡れる来歴。derived_from=戦略 id（戦略 partial の
+    // provenance がさらに rubric/要件へ繋がる）。source_ref に rubric_ref を併記して 1 ホップで rubric も指す。
+    provenance: prov("S6", [strategy.id], rubric.derived_from),
   };
   const check = validateArtifact("BenchResult", result); // 契約検証（非throw・警告のみ）
   if (!check.valid) console.warn(`[S6] ⚠ result が BenchResult 契約に不一致: ${check.message}`);
@@ -717,6 +743,7 @@ export async function runLoop(
         result_id: `${runId}-r${round}`, strategy_id: best.strategyId, rubric_ref: rubric.derived_from,
         eval_mode: "test", score: best.ratio, rank: 1, metrics: { passed_test_ratio: best.ratio },
         passed_test_ratio: best.ratio, threshold: [],
+        provenance: prov("S6", [best.strategyId], rubric.derived_from), // AC6: result→戦略→rubric
       };
       writeJson(resultPath(runDir), result);
     }

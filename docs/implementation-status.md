@@ -148,7 +148,7 @@ mvp-vertical-slice.md の原則「無限ループ・S2大量クロール・S4独
 3. **S2 / resume.ts / idempotency が runner 未配線**: 3モジュールとも実装＋テスト緑だが `runner.ts` は import しない（§1.3）。ただし resume 自体は runner の inline `loadExistingS3()`（L428-442）で S3 partial を消費する形で別途実装され**動く**（§2.1 / AC5 部分）。未配線なのは `resume.ts` モジュール経由の S5 attempt 単位 resume と idempotency 二重実行ガード。
 4. **archiver / crawl サイドカー実 spawn**: archiver は未配線。crawl は s2 経由のみで、Python サイドカー（`crawl-py/crawl.py`）の実 spawn は自動テストでモック化されており**実プロセス未検証**。
 5. **進化ループ（D18）本番未起動**: jankenEvolve/evolveDemo はデモ。decisions.md「評価器D3確定まで起動しない」に従い**意図的に未配線**（設計通りだが「動く進化」ではない）。
-6. **CodegenResult が書かれていない**: `types.ts` に `CodegenResult{feedbackHistory}` 型はあるが、runner は `feedbackHistory` を**ローカル変数に持つだけで partial/result に永続化していない**。AC「reflector フィードバックを feedbackHistory に残す」は**メモリ上は満たすがファイル証跡は残らない**。
+6. ~~**CodegenResult が書かれていない**~~ → **解消（2026-06-13）**: runner は S5 ループ後に `CodegenResult{strategy_id,passed,attempts,feedbackHistory,finalFeedback?}` を `S5R` partial に書く（`validateArtifact("CodegenResult")` で契約検証）。実 run（toy-fizzbuzz）で `partials/S5R_PARTIAL_W0B0_*.json` が生成され `feedbackHistory:["attempt 1: PASS (exit 0)"]` を永続化することを確認済み。ただし **複数 attempt（失敗注入）での reflector 実発火証跡は別途必要**（fizzbuzz は 1 attempt PASS なので feedbackHistory が 1 要素）。
 7. **dashboard-lite 実起動未検証**: HTTP サーバはテスト緑だが、runner と別プロセスで、実ブラウザ表示は未確認。
 8. **git untracked（未コミット）ファイル**: `orchestrator/runSummary.ts`, `tests/runSummary.test.ts`, `scripts/` が untracked（commit されていない）。`evolution/evolveDemo.ts`/`tests/evolveDemo.test.ts`/`examples/toy-hard/` は commit 6371b03 で tracked 済み（過去の「未コミット」記述は訂正）。
 9. **claudeRunner の spawn 層が未テスト**: 純ロジック（extractText/buildArgs）すら named export されておらず、geminiRunner と非対称（gemini は純ロジックを export しテスト済み）。
@@ -160,13 +160,13 @@ mvp-vertical-slice.md の原則「無限ループ・S2大量クロール・S4独
 | # | AC | 判定 | 根拠 |
 |---|---|---|---|
 | AC1 | `python3`＋`claude` CLI 環境で `taikai run` 一発で `result.json` が出る | 達成 | `outputs/dev-run/result.json`・`fbp-run` が実在。経路は runner.runSlice |
-| AC2 | わざと通らない仕様にすると D22 ループが3回試行し reflector feedback を feedbackHistory に残す | 部分 | maxAttempts=3 ループ・reflect()・feedbackHistory.push は実装済み。だが**失敗 run の証跡が outputs に無く実発火未検証**。さらに feedbackHistory は**ファイルに永続化されない**（§3-6）。CodegenResult 未出力 |
+| AC2 | わざと通らない仕様にすると D22 ループが3回試行し reflector feedback を feedbackHistory に残す | 部分（前進） | maxAttempts=3 ループ・reflect()・feedbackHistory.push は実装済み。**feedbackHistory は CodegenResult として `S5R` partial に永続化されるようになった（2026-06-13・§3-6 解消・実 run で確認）**。残るは**失敗注入での複数 attempt reflector 実発火の証跡**（成功 toy では 1 attempt なので multi-attempt 系列が未収集） |
 | AC3 | `tests/` を改変すると S6 が E_TEST_TAMPER で失格 | 実装あり/未実証 | `runner.ts` で `hashDir(projTests)` を S5開始時に凍結→S6で再ハッシュ比較→不一致で `E_TEST_TAMPER`+notify+exit 1。コードは正しいが**改変ケースの実 run 証跡は無く未検証** |
 | AC4 | TOURNAMENT_INFO 必須欠落で S1 が exit 1＋通知 | 達成 | `doctor()` が必須6フィールド検査→欠落で `E_S1_INPUT` notify→exit 1 |
 | AC5 | 途中で殺して再実行すると partial から resume（同 attempt を二重実行しない） | 部分 | `resume.ts`/`idempotencyStore.ts` モジュールは runner 未配線。だが runner は冒頭で inline 関数 `loadExistingS3()`（runner.ts L428-442、runSlice L225 で呼ぶ）を介して**既存 S3 partial(status!=="error")を読み LLM 再生成をスキップする**＝**S3 段の resume は動く**。未配線なのは S5 attempt 単位の resume と idempotency 二重実行ガード（同一 attempt を再実行しない部分） |
-| AC6 | result.json から provenance.derived_from で戦略→要件→ルールまで遡れる | 部分 | partial の provenance.derived_from は繋がる（S5→["S3-001"]、S3→["rubric:..."]）。ただし**最終 result.json 自体に provenance フィールドが無い**（`rubric_ref` 文字列参照のみ）。partial 経由では遡れるが result 単体からは辿れない |
+| AC6 | result.json から provenance.derived_from で戦略→要件→ルールまで遡れる | **達成（2026-06-13）** | result.json に `provenance{produced_by:"S6", derived_from:[strategy_id], source_ref:rubric_ref}` を載せた（型＋schema＋runner 2 箇所）。実 run（toy-fizzbuzz）で result→`S3-fizzbuzz-modulo`（戦略 partial の derived_from=`["rubric:toy-fizzbuzz-rules"]`）→ rubric の鎖が **result 単体から辿れる**ことを確認済み |
 
-**サマリ**: 6項目中、**完全達成2（AC1, AC4）**、**部分4（AC2, AC3, AC5, AC6）**。
+**サマリ**: 6項目中、**完全達成3（AC1, AC4, AC6）**、**部分3（AC2, AC3, AC5）**。（2026-06-13: AC6 を result.json への provenance 付与で達成、AC2 は feedbackHistory 永続化で前進＝残るは失敗注入での multi-attempt 証跡。）
 AC5 は S3 段の resume が inline `loadExistingS3()` で**動く**（殺して再実行すると S3 戦略は再生成せず再利用＝高価な LLM 呼び出しの二重実行を回避）。残るのは S5 attempt 単位の resume と idempotency の二重実行ガード（`resume.ts`/`idempotencyStore.ts` モジュールは実装＋テスト緑だが runner 未配線＝配線すれば S5 まで resume が伸びる）。
 
 ---
@@ -194,9 +194,9 @@ AC5 は S3 段の resume が inline `loadExistingS3()` で**動く**（殺して
 設計と実装の差を埋めるための具体配線ポイント（本書は棚卸しが目的なので提案のみ）:
 
 1. **AC5 を満たす**: `runner.runSlice` 冒頭で `scanCompleted(runDir,"S5")` を呼び、完了 attempt をスキップ／`IdempotencyStore.loadFromRun` で二重実行回避（モジュールは完成済み・配線のみ）。
-2. **D22 証跡の永続化**: S5 ループ後に `CodegenResult{strategy_id,passed,attempts,feedbackHistory}` を partial/result に書く（型は既存）。reflector 実発火の証跡が AC2 の実証に必要。
+2. ~~**D22 証跡の永続化**~~ → **完了（2026-06-13）**: S5 ループ後に `CodegenResult` を `S5R` partial に書く配線済（§3-6・AC2）。残るは失敗注入で multi-attempt の feedbackHistory を集める実 run。
 3. **回帰ガード**: テストを ID 単位で扱い `passed_anchor_ids` を実値化（現状 `["all"]` 固定）。
-4. **result の provenance**: result.json に provenance を載せ AC6 を result 単体で満たす。
+4. ~~**result の provenance**~~ → **完了（2026-06-13）**: result.json に provenance を載せ AC6 を result 単体で達成（実 run で鎖を確認）。
 5. **コミット**: untracked な evolveDemo / toy-hard を整理。
 
 ---

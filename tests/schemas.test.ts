@@ -95,6 +95,31 @@ describe("schemas: 正常系（types.ts 準拠の最小サンプルは全て val
     expect(validate("BenchResult", b).valid).toBe(true);
   });
 
+  it("BenchResult: provenance 付き（AC6・result から戦略へ遡れる）も valid", () => {
+    const b: BenchResult = {
+      result_id: "run-1",
+      strategy_id: "S3-001",
+      rubric_ref: "tournament:demo",
+      eval_mode: "test",
+      score: 1,
+      rank: 1,
+      metrics: { passed_test_ratio: 1 },
+      passed_test_ratio: 1,
+      threshold: [],
+      provenance: {
+        produced_by: "S6",
+        derived_from: ["S3-001"],
+        source_ref: "tournament:demo",
+        timestamp: "2026-06-13T00:00:00.000Z",
+        agent: "claude",
+      },
+    };
+    const r = validate("BenchResult", b);
+    expect(r.valid).toBe(true);
+    // 来歴が戦略 id を指す（result 単体から戦略へ 1 ホップで遡れる）。
+    expect(b.provenance?.derived_from).toContain("S3-001");
+  });
+
   it("LeaderboardEntry", () => {
     const l: LeaderboardEntry = {
       run_id: "run-1",

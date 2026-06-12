@@ -49,6 +49,7 @@
     },
     "distance": { "type": "number" },
     "diff_vs_prev": { "type": "number" },
+    "provenance": { "$ref": "Provenance" },
     "threshold": {
       "type": "array",
       "items": {
