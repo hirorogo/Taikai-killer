@@ -24,64 +24,64 @@
 
 ## 1. 実装済みモジュール表
 
-「runner配線」列: ✅=runner.ts が import して実行する / ❌=未配線（テスト or 他モジュールからのみ参照）。
+「runner配線」列: 済=runner.ts が import して実行する / 未=未配線（テスト or 他モジュールからのみ参照）。
 
 ### 1.1 オーケストレータ共有層（読むだけ＝担当外、現状把握用）
 
 | ファイル | 役割 | テスト | runner配線 | 状態 |
 |---|---|---|---|---|
 | `orchestrator/index.ts` | CLI エントリ（probe/run/doctor）。claude+gemini を register | なし | — | 動く（probe/run/doctor 実行可） |
-| `orchestrator/runner.ts` | 縦串本体 S3→S5→S6＋battle 分岐 | なし（実 run で実証） | ✅本体 | 動く |
-| `orchestrator/config.ts` | PhaseConfig / CB しきい値 / MVP_PHASES | なし | ✅ | 動く |
-| `orchestrator/types.ts` | フェーズ間データ契約（TS型） | （schemas で間接） | ✅ | 動く |
-| `orchestrator/paths.ts` | outputs パス規約（D2） | （resume 等で間接） | ✅ | 動く |
-| `orchestrator/runtimeRegistry.ts` | CLI runtime 統一層（D4） | なし | ✅ | 動く |
-| `orchestrator/schemas.ts` | ajv JSON Schema 検証 | `schemas.test.ts`(19) | ✅(validate 経由) | 動く |
+| `orchestrator/runner.ts` | 縦串本体 S3→S5→S6＋battle 分岐 | なし（実 run で実証） | 本体 | 動く |
+| `orchestrator/config.ts` | PhaseConfig / CB しきい値 / MVP_PHASES | なし | 済 | 動く |
+| `orchestrator/types.ts` | フェーズ間データ契約（TS型） | （schemas で間接） | 済 | 動く |
+| `orchestrator/paths.ts` | outputs パス規約（D2） | （resume 等で間接） | 済 | 動く |
+| `orchestrator/runtimeRegistry.ts` | CLI runtime 統一層（D4） | なし | 済 | 動く |
+| `orchestrator/schemas.ts` | ajv JSON Schema 検証 | `schemas.test.ts`(19) | 済(validate 経由) | 動く |
 
 ### 1.2 runner に配線済み（=動く）
 
 | ファイル | 役割 | テスト | runner配線 | 状態 |
 |---|---|---|---|---|
-| `orchestrator/runtimes/claudeRunner.ts` | claude CLI subprocess driver | `geminiRunner.test.ts` は gemini側。claude純ロジックは未テスト | ✅ | 動く（実 run で S3/S5 生成実績）。spawn部は未テスト |
-| `orchestrator/notify.ts` | best-effort 通知（欠落5） | `notify.test.ts`(8) | ✅ | 動く |
-| `orchestrator/events.ts` | append-only イベントログ（D9 write-only） | `events.test.ts`(9) | ✅ | 動く |
-| `orchestrator/circuitBreaker.ts` | CB 暴走停止（D11） | `circuitBreaker.test.ts`(9) | ✅ | 動く |
-| `orchestrator/collector.ts` | S3 戦略 dedup（純ロジック） | `collector.test.ts`(18) | ✅ | 動く |
-| `orchestrator/validate.ts` | 検証ラッパ（ajv 委譲） | `validate.test.ts`(14) | ✅ | 動く |
-| `orchestrator/backup.ts` | 成果物バックアップ（欠落6） | `backup.test.ts`(13) | ✅ | 動く（`TAIKAI_BACKUP_DIR` 未設定なら no-op） |
-| `orchestrator/battle.ts` | round-robin 純集計＋じゃんけん優劣表 | `battle.test.ts`(18) | ✅(battle分岐) | 動く |
-| `orchestrator/battleRunner.ts` | 戦略プロセス同士の spawn 対戦 I/O | `battleRunner.test.ts`(18 純ロジックのみ) | ✅(battle分岐) | 動く（janken-run 実績）。spawn部はテスト外 |
-| `orchestrator/s6battle.ts` | battle→BenchResult 変換＋rank | `s6battle.test.ts`(12) | ✅(battle分岐) | 動く |
+| `orchestrator/runtimes/claudeRunner.ts` | claude CLI subprocess driver | `geminiRunner.test.ts` は gemini側。claude純ロジックは未テスト | 済 | 動く（実 run で S3/S5 生成実績）。spawn部は未テスト |
+| `orchestrator/notify.ts` | best-effort 通知（欠落5） | `notify.test.ts`(8) | 済 | 動く |
+| `orchestrator/events.ts` | append-only イベントログ（D9 write-only） | `events.test.ts`(9) | 済 | 動く |
+| `orchestrator/circuitBreaker.ts` | CB 暴走停止（D11） | `circuitBreaker.test.ts`(9) | 済 | 動く |
+| `orchestrator/collector.ts` | S3 戦略 dedup（純ロジック） | `collector.test.ts`(18) | 済 | 動く |
+| `orchestrator/validate.ts` | 検証ラッパ（ajv 委譲） | `validate.test.ts`(14) | 済 | 動く |
+| `orchestrator/backup.ts` | 成果物バックアップ（欠落6） | `backup.test.ts`(13) | 済 | 動く（`TAIKAI_BACKUP_DIR` 未設定なら no-op） |
+| `orchestrator/battle.ts` | round-robin 純集計＋じゃんけん優劣表 | `battle.test.ts`(18) | 済(battle分岐) | 動く |
+| `orchestrator/battleRunner.ts` | 戦略プロセス同士の spawn 対戦 I/O | `battleRunner.test.ts`(18 純ロジックのみ) | 済(battle分岐) | 動く（janken-run 実績）。spawn部はテスト外 |
+| `orchestrator/s6battle.ts` | battle→BenchResult 変換＋rank | `s6battle.test.ts`(12) | 済(battle分岐) | 動く |
 
 ### 1.3 実装＋テスト緑だが runner 未配線
 
 | ファイル | 役割 | テスト | runner配線 | 状態 |
 |---|---|---|---|---|
-| `orchestrator/s2.ts` | S2 外部知見クロール＋知見INDEX（D7） | `s2.test.ts`(41) | ❌ | テストのみ・未配線（runner は S2 を呼ばない＝MVP仕様通りスキップ） |
-| `orchestrator/crawl.ts` | クロール（Python サイドカー呼び出し） | `crawl.test.ts`(15) | ❌(s2経由のみ) | テストのみ・未配線。サイドカー実 spawn は未検証 |
-| `orchestrator/resume.ts` | partial glob スキャンで resume（D9） | `resume.test.ts`(9) | ❌ | テストのみ・**resume.ts モジュール自体は runner未配線**。ただし S3 段の resume は runner.ts の inline `loadExistingS3()`（L428-442）で別途実装され**動く**（§2.1 / AC5 参照） |
-| `orchestrator/idempotency.ts` | 冪等キー生成（D10） | `idempotency.test.ts`(11) | ❌ | テストのみ・未配線 |
-| `orchestrator/idempotencyStore.ts` | 冪等マーカー集合（D10×D9） | `idempotencyStore.test.ts`(13) | ❌ | テストのみ・未配線（resume と組で AC「二重実行しない」未達） |
-| `orchestrator/archiver.ts` | run アーカイブ（zstd tarball / steal E-6） | `archiver.test.ts`(9) | ❌ | テストのみ・未配線 |
+| `orchestrator/s2.ts` | S2 外部知見クロール＋知見INDEX（D7） | `s2.test.ts`(41) | 未 | テストのみ・未配線（runner は S2 を呼ばない＝MVP仕様通りスキップ） |
+| `orchestrator/crawl.ts` | クロール（Python サイドカー呼び出し） | `crawl.test.ts`(15) | 未(s2経由のみ) | テストのみ・未配線。サイドカー実 spawn は未検証 |
+| `orchestrator/resume.ts` | partial glob スキャンで resume（D9） | `resume.test.ts`(9) | 未 | テストのみ・**resume.ts モジュール自体は runner未配線**。ただし S3 段の resume は runner.ts の inline `loadExistingS3()`（L428-442）で別途実装され**動く**（§2.1 / AC5 参照） |
+| `orchestrator/idempotency.ts` | 冪等キー生成（D10） | `idempotency.test.ts`(11) | 未 | テストのみ・未配線 |
+| `orchestrator/idempotencyStore.ts` | 冪等マーカー集合（D10×D9） | `idempotencyStore.test.ts`(13) | 未 | テストのみ・未配線（resume と組で AC「二重実行しない」未達） |
+| `orchestrator/archiver.ts` | run アーカイブ（zstd tarball / steal E-6） | `archiver.test.ts`(9) | 未 | テストのみ・未配線 |
 | `orchestrator/runtimes/geminiRunner.ts` | gemini CLI driver（D4 2モデル目） | `geminiRunner.test.ts`(10 純ロジック) | register済/未使用 | テストのみ。**認証未設定（GEMINI_API_KEY 等）→ error.code=41。実発火未検証** |
-| `orchestrator/runtimes/geminiMcp.ts` | gemini MCP 連携の知見 | `geminiMcp.test.ts`(11) | ❌ | テストのみ・未配線 |
+| `orchestrator/runtimes/geminiMcp.ts` | gemini MCP 連携の知見 | `geminiMcp.test.ts`(11) | 未 | テストのみ・未配線 |
 
 ### 1.4 進化トラック（D18①）— 実証デモ・本番未配線
 
 | ファイル | 役割 | テスト | runner配線 | 状態 |
 |---|---|---|---|---|
-| `evolution/numericOptimizer.ts` | ヒルクライム最適化（決定的・seed固定） | `numericOptimizer.test.ts`(12) | ❌ | テストのみ。LLM非依存・純ロジック |
-| `evolution/jankenStrategy.ts` | じゃんけん数値パラメータ戦略 | （jankenEvolution 経由） | ❌ | テストのみ |
-| `evolution/jankenEvolve.ts` | 数値戦略を勝率で進化（D18①実証） | `jankenEvolution.test.ts`(16) | ❌ | テストのみ・**本番進化ループ未配線**（評価器D3確定まで起動しない＝設計通り） |
-| `evolution/evolveDemo.ts` | D18① end-to-end デモ薄ラッパ | `evolveDemo.test.ts`(9) | ❌ | テストのみ・未配線（commit 6371b03 で tracked。9テスト緑） |
+| `evolution/numericOptimizer.ts` | ヒルクライム最適化（決定的・seed固定） | `numericOptimizer.test.ts`(12) | 未 | テストのみ。LLM非依存・純ロジック |
+| `evolution/jankenStrategy.ts` | じゃんけん数値パラメータ戦略 | （jankenEvolution 経由） | 未 | テストのみ |
+| `evolution/jankenEvolve.ts` | 数値戦略を勝率で進化（D18①実証） | `jankenEvolution.test.ts`(16) | 未 | テストのみ・**本番進化ループ未配線**（評価器D3確定まで起動しない＝設計通り） |
+| `evolution/evolveDemo.ts` | D18① end-to-end デモ薄ラッパ | `evolveDemo.test.ts`(9) | 未 | テストのみ・未配線（commit 6371b03 で tracked。9テスト緑） |
 
 ### 1.5 dashboard-lite（read-only ビューア）
 
 | ファイル | 役割 | テスト | runner配線 | 状態 |
 |---|---|---|---|---|
-| `dashboard-lite/server.ts` | outputs/leaderboard を read-only 提供 | `dashboardLite.test.ts`(13) / `dashboardFull.test.ts`(17) / `dashboardSSE.test.ts`(8) | ❌(独立プロセス) | テストのみ。runner とは別プロセス、実起動は未検証 |
+| `dashboard-lite/server.ts` | outputs/leaderboard を read-only 提供 | `dashboardLite.test.ts`(13) / `dashboardFull.test.ts`(17) / `dashboardSSE.test.ts`(8) | 未(独立プロセス) | テストのみ。runner とは別プロセス、実起動は未検証 |
 | `dashboard-lite/readers.ts` | outputs read-only リーダ | 同上 | — | テストのみ |
-| `orchestrator/runSummary.ts` | run サマリ生成（`summarizeRun`/`foldPhases` 純ロジック・観測用。readers.ts に I/O 委譲） | `runSummary.test.ts`（**git untracked**） | ❌(runner/index 未import) | テストのみ・未配線・**実在だが git untracked（未コミット）**（runner も index も import せず、観測用に独立） |
+| `orchestrator/runSummary.ts` | run サマリ生成（`summarizeRun`/`foldPhases` 純ロジック・観測用。readers.ts に I/O 委譲） | `runSummary.test.ts`（**git untracked**） | 未(runner/index 未import) | テストのみ・未配線・**実在だが git untracked（未コミット）**（runner も index も import せず、観測用に独立） |
 | `dashboard/` (frontend) | speca から vendor した React UI | — | — | vendor 物・本プロジェクト未統合 |
 
 ---
@@ -90,7 +90,7 @@
 
 `outputs/` に残る実 run の成果物で「実際に通った」ことを確認した。
 
-### 2.1 test型（fizzbuzz）— ✅実通
+### 2.1 test型（fizzbuzz）— 実通
 
 - `outputs/dev-run/result.json`: `eval_mode:"test"`, `strategy_id:"S3-001"`, `passed_test_ratio:1`, `rank:1`
 - `outputs/fbp-run/result.json`: `toy-fizzbuzz-plus`, `passed_test_ratio:1`
@@ -99,14 +99,14 @@
 - **resume（S3 段）**: 再実行時 runner は `loadExistingS3()` で上記 `S3_PARTIAL_*.json` を読み、`status!=="error"` の戦略を再利用して **S3 の LLM 再生成をスキップ**（runner.ts L225-228・L428-442）。`outputs/dev-run/partials/` に S3 partial が現存するため、この run を再実行すれば S3 は再生成されない＝AC5 の S3 部分は実コードで動く。
 - **動く（実 run 実績）**。ただし S3/S5/S5-reflector の LLM 発火は自動テスト範囲外（=「動いた形跡はあるが再現性は手続き的・未検証」）。
 
-### 2.2 対戦型（janken）— ✅実通
+### 2.2 対戦型（janken）— 実通
 
 - `outputs/janken-run/result.json`: `eval_mode:"battle"`, winner `beat-last`, `win_rate:0.475`, `battle.record{wins:19,losses:0,draws:21}`, opponents `[always-rock, cycle]`。
 - 経路: rubric.eval_mode=="battle" 分岐 → `players/{id}/` を読み（3体）→ runBattleEval（spawn で総当たり 20 ラウンド）→ toBenchResults（rank 付与）→ result.json＋leaderboard（3体分）。
 - プレイヤーは実 Python（`examples/toy-janken/players/{always-rock,beat-last,cycle}/player.py`）。
 - **動く（実 run 実績）**。spawn 対戦 I/O はユニットテスト外だが、実 run で 40 マッチ完走している。
 
-### 2.3 test型（toy-hard / ローマ数字）— ✅実通
+### 2.3 test型（toy-hard / ローマ数字）— 実通
 
 - `outputs/hard-run/result.json`: `eval_mode:"test"`, `strategy_id:"S3-roman-tablemap"`, `rubric_ref:"toy-hard-roman-rules"`, `passed_test_ratio:1`, `rank:1`。
 - 入力は `examples/toy-hard/`（commit 6371b03 で tracked: TOURNAMENT_INFO/SCORING_RUBRIC/spec.md/tests/test_roman.py）。S3 hardening（JSON 厳格リトライ）と S3 resume を検証した難問 run。
@@ -124,7 +124,7 @@ mvp-vertical-slice.md の原則「無限ループ・S2大量クロール・S4独
 
 1. **S5 reflector の LLM 発火（D22 既定=LLM）**: `runner.ts:reflect()` は実装済みで実 run 経路にあるが、**ユニットテストは無い**。`TAIKAI_REFLECTOR=template` で LLM 省略にできる。fizzbuzz は 1 attempt で PASS したため、**reflector が実際に発火した証跡（複数 attempt の feedbackHistory）は `outputs/` に残っていない**＝reflector 実発火は**未検証**。
 2. **geminiRunner 認証未設定**: `index.ts` で register 済みだが全フェーズ `model:"claude"`。`GEMINI_API_KEY`/`GOOGLE_GENAI_USE_GCA` 未設定だと error.code=41。`checkAvailable` は `--version` のみで認証を見ない。**実 LLM 応答は未検証**。
-3. **S2 / resume.ts / idempotency が runner 未配線**: 3モジュールとも実装＋テスト緑だが `runner.ts` は import しない（§1.3）。ただし resume 自体は runner の inline `loadExistingS3()`（L428-442）で S3 partial を消費する形で別途実装され**動く**（§2.1 / AC5 ⚠部分）。未配線なのは `resume.ts` モジュール経由の S5 attempt 単位 resume と idempotency 二重実行ガード。
+3. **S2 / resume.ts / idempotency が runner 未配線**: 3モジュールとも実装＋テスト緑だが `runner.ts` は import しない（§1.3）。ただし resume 自体は runner の inline `loadExistingS3()`（L428-442）で S3 partial を消費する形で別途実装され**動く**（§2.1 / AC5 部分）。未配線なのは `resume.ts` モジュール経由の S5 attempt 単位 resume と idempotency 二重実行ガード。
 4. **archiver / crawl サイドカー実 spawn**: archiver は未配線。crawl は s2 経由のみで、Python サイドカー（`crawl-py/crawl.py`）の実 spawn は自動テストでモック化されており**実プロセス未検証**。
 5. **進化ループ（D18）本番未起動**: jankenEvolve/evolveDemo はデモ。decisions.md「評価器D3確定まで起動しない」に従い**意図的に未配線**（設計通りだが「動く進化」ではない）。
 6. **CodegenResult が書かれていない**: `types.ts` に `CodegenResult{feedbackHistory}` 型はあるが、runner は `feedbackHistory` を**ローカル変数に持つだけで partial/result に永続化していない**。AC「reflector フィードバックを feedbackHistory に残す」は**メモリ上は満たすがファイル証跡は残らない**。
@@ -138,12 +138,12 @@ mvp-vertical-slice.md の原則「無限ループ・S2大量クロール・S4独
 
 | # | AC | 判定 | 根拠 |
 |---|---|---|---|
-| AC1 | `python3`＋`claude` CLI 環境で `taikai run` 一発で `result.json` が出る | ✅達成 | `outputs/dev-run/result.json`・`fbp-run` が実在。経路は runner.runSlice |
-| AC2 | わざと通らない仕様にすると D22 ループが3回試行し reflector feedback を feedbackHistory に残す | ⚠️部分 | maxAttempts=3 ループ・reflect()・feedbackHistory.push は実装済み。だが**失敗 run の証跡が outputs に無く実発火未検証**。さらに feedbackHistory は**ファイルに永続化されない**（§3-6）。CodegenResult 未出力 |
-| AC3 | `tests/` を改変すると S6 が E_TEST_TAMPER で失格 | ✅実装あり/未実証 | `runner.ts` で `hashDir(projTests)` を S5開始時に凍結→S6で再ハッシュ比較→不一致で `E_TEST_TAMPER`+notify+exit 1。コードは正しいが**改変ケースの実 run 証跡は無く未検証** |
-| AC4 | TOURNAMENT_INFO 必須欠落で S1 が exit 1＋通知 | ✅達成 | `doctor()` が必須6フィールド検査→欠落で `E_S1_INPUT` notify→exit 1 |
-| AC5 | 途中で殺して再実行すると partial から resume（同 attempt を二重実行しない） | ⚠️部分 | `resume.ts`/`idempotencyStore.ts` モジュールは runner 未配線。だが runner は冒頭で inline 関数 `loadExistingS3()`（runner.ts L428-442、runSlice L225 で呼ぶ）を介して**既存 S3 partial(status!=="error")を読み LLM 再生成をスキップする**＝**S3 段の resume は動く**。未配線なのは S5 attempt 単位の resume と idempotency 二重実行ガード（同一 attempt を再実行しない部分） |
-| AC6 | result.json から provenance.derived_from で戦略→要件→ルールまで遡れる | ⚠️部分 | partial の provenance.derived_from は繋がる（S5→["S3-001"]、S3→["rubric:..."]）。ただし**最終 result.json 自体に provenance フィールドが無い**（`rubric_ref` 文字列参照のみ）。partial 経由では遡れるが result 単体からは辿れない |
+| AC1 | `python3`＋`claude` CLI 環境で `taikai run` 一発で `result.json` が出る | 達成 | `outputs/dev-run/result.json`・`fbp-run` が実在。経路は runner.runSlice |
+| AC2 | わざと通らない仕様にすると D22 ループが3回試行し reflector feedback を feedbackHistory に残す | 部分 | maxAttempts=3 ループ・reflect()・feedbackHistory.push は実装済み。だが**失敗 run の証跡が outputs に無く実発火未検証**。さらに feedbackHistory は**ファイルに永続化されない**（§3-6）。CodegenResult 未出力 |
+| AC3 | `tests/` を改変すると S6 が E_TEST_TAMPER で失格 | 実装あり/未実証 | `runner.ts` で `hashDir(projTests)` を S5開始時に凍結→S6で再ハッシュ比較→不一致で `E_TEST_TAMPER`+notify+exit 1。コードは正しいが**改変ケースの実 run 証跡は無く未検証** |
+| AC4 | TOURNAMENT_INFO 必須欠落で S1 が exit 1＋通知 | 達成 | `doctor()` が必須6フィールド検査→欠落で `E_S1_INPUT` notify→exit 1 |
+| AC5 | 途中で殺して再実行すると partial から resume（同 attempt を二重実行しない） | 部分 | `resume.ts`/`idempotencyStore.ts` モジュールは runner 未配線。だが runner は冒頭で inline 関数 `loadExistingS3()`（runner.ts L428-442、runSlice L225 で呼ぶ）を介して**既存 S3 partial(status!=="error")を読み LLM 再生成をスキップする**＝**S3 段の resume は動く**。未配線なのは S5 attempt 単位の resume と idempotency 二重実行ガード（同一 attempt を再実行しない部分） |
+| AC6 | result.json から provenance.derived_from で戦略→要件→ルールまで遡れる | 部分 | partial の provenance.derived_from は繋がる（S5→["S3-001"]、S3→["rubric:..."]）。ただし**最終 result.json 自体に provenance フィールドが無い**（`rubric_ref` 文字列参照のみ）。partial 経由では遡れるが result 単体からは辿れない |
 
 **サマリ**: 6項目中、**完全達成2（AC1, AC4）**、**部分4（AC2, AC3, AC5, AC6）**。
 AC5 は S3 段の resume が inline `loadExistingS3()` で**動く**（殺して再実行すると S3 戦略は再生成せず再利用＝高価な LLM 呼び出しの二重実行を回避）。残るのは S5 attempt 単位の resume と idempotency の二重実行ガード（`resume.ts`/`idempotencyStore.ts` モジュールは実装＋テスト緑だが runner 未配線＝配線すれば S5 まで resume が伸びる）。
