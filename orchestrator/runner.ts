@@ -26,6 +26,7 @@ import { backupResult } from "./backup.ts";
 import { runBattleEval } from "./s6battle.ts";
 import type { BattlePlayer } from "./battleRunner.ts";
 import { langProfile } from "./langSupport.ts";
+import { gatherKnowledge, refineRequirements } from "./loopPhases.ts";
 import {
   partialsDir,
   logsDir,
@@ -661,6 +662,21 @@ export async function runLoop(
   const patience = Math.max(1, opts.patience ?? 4);
   pipelineStarted(runDir, runId);
 
+  // S2 外部知見（任意・graceful）→ S4 要件精緻化（任意・graceful）。spec を一度だけ強化。
+  let workSpec = spec;
+  const knowledge = await gatherKnowledge(runDir, ti);
+  if (knowledge) {
+    workSpec = `${workSpec}\n\n## 外部知見（S2）\n${knowledge}`;
+    console.log("[S2] 外部知見を取得して spec に反映");
+  }
+  if (process.env["TAIKAI_SKIP_S4"] !== "1") {
+    const refined = await refineRequirements(workSpec, "");
+    if (refined && refined !== workSpec) {
+      workSpec = refined;
+      console.log("[S4] 要件を精緻化");
+    }
+  }
+
   const outcomes: { strategyId: string; approach: string; ratio: number }[] = [];
   let best: { strategyId: string; approach: string; ratio: number } | null = null;
   let noImprove = 0;
@@ -670,7 +686,7 @@ export async function runLoop(
   for (let round = 1; round <= maxRounds; round++) {
     // いいとこ取り: これまでの上位 approach を種に再投入
     const priorTop = [...outcomes].sort((a, b) => b.ratio - a.ratio).slice(0, 2).map((o) => ({ approach: o.approach, ratio: o.ratio }));
-    const fresh = (await generateStrategies(spec, rubric, priorTop.length ? priorTop : undefined)).map((s) => ({
+    const fresh = (await generateStrategies(workSpec, rubric, priorTop.length ? priorTop : undefined)).map((s) => ({
       ...s,
       id: `r${round}-${s.id}`,
     }));
@@ -682,7 +698,7 @@ export async function runLoop(
     console.log(`\n=== round ${round}/${maxRounds} (best=${best?.ratio.toFixed(3) ?? "-"}) ===`);
     let improvedThisRound = false;
     for (const strat of targets) {
-      const oc = await implementStrategyTest(runDir, strat, ti, spec, MVP_PHASES["S5"]!.maxAttempts ?? 3, batch++);
+      const oc = await implementStrategyTest(runDir, strat, ti, workSpec, MVP_PHASES["S5"]!.maxAttempts ?? 3, batch++);
       const rec = { strategyId: oc.strategyId, approach: strat.approach, ratio: oc.ratio };
       outcomes.push(rec);
       appendLeaderboard({

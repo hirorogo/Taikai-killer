@@ -1,0 +1,9 @@
+{
+  "name": "toy-multi-duration",
+  "language": "python",
+  "run_cmd": "python src/main.py",
+  "test_cmd": "python tests/test_duration.py",
+  "test_source": "provided",
+  "submission": { "format": "zip" },
+  "automation_allowed": true
+}
