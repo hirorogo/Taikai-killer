@@ -148,8 +148,12 @@ docs/quests.md §4.1 の「7並べは PIMC（相手手札を多数サンプリ�
 
 ```console
 $ echo '{"params":{},"games":50,"seed":0,"sim_count":200}' | python evaluate_mc.py
-{{SPEC_RESULT}}
+{"win_rate": 0.58, "games": 50, "sim_count": 200}
 ```
+
+→ 3 人卓で MC 1 体が 58% の局で 1 着。相手ヒューリスティック 2 体（合計でも 42%）を
+**明確に勝ち越し（win_rate 0.58 > 0.5）**。全員同等なら 1/3≒0.333 なので、0.58 は MC が
+ヒューリスティックを大きく上回ることを意味する。
 
 `sim_count` を上げるほど win_rate が単調に伸びる（同 seed・同 games=30 で比較・実測）:
 

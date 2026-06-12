@@ -1,0 +1,2 @@
+MONO sim_count=10 games=15x4seeds(=60) mean_win_rate=0.5333 per_seed=[0.533, 0.467, 0.667, 0.467]
+MONO sim_count=40 games=15x4seeds(=60) mean_win_rate=0.5333 per_seed=[0.6, 0.533, 0.667, 0.333]
