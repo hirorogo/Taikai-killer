@@ -59,7 +59,8 @@ Taikai-killer は**1回だけのブートストラップ S1 ＋ 無限ループ 
 - **来歴(provenance)チェーン** — 全レコードが親 ID と元ソースを持ち、`result.json` から大会ルールまで JSON だけで遡れる
 - **安全ガード（隔離の代わり）** — Circuit Breaker（`recordSkip` で待機を失敗に数えない）・2段自己修復（LLM cooldown）・コスト追跡
 - **自己改善（D22 Reflexion）** — execute → evaluate → reflect → retry。テストアンカー回帰ガードで単調改善を強制
-- **2トラック進化** — 数値（閾値/パラメータ）は LLM 不要のコードで最適化、構造（approach）は LLM が変異
+- **2トラック進化** — 数値（閾値/パラメータ）は LLM 不要のコードで最適化、構造（approach）は LLM が変異（構造トラックは将来）
+- **横断クエストハーネス** — X/AI/Robo/Data の 4 クエストを同一の `QuestAdapter` 契約・同一最適化器で自律最適化（`taikai quest`・数値トラック実動）
 - **学術的再現性** — 全 prompt/schema/親 partial の hash を固定、手続き的再現を担保
 
 ---
@@ -80,7 +81,7 @@ Taikai-killer は**1回だけのブートストラップ S1 ＋ 無限ループ 
 ```bash
 npm install        # 依存は ajv のみ（実行は tsx / vitest / typescript）
 npm run typecheck  # tsc --noEmit（strict / NodeNext）。exit 0 で型OK
-npm test           # vitest run — 333 tests / 25 files（純ロジックのみ）
+npm test           # vitest run — 476 tests / 32 files（純ロジックのみ）
 ```
 
 ### CLI コマンド一覧
@@ -93,6 +94,7 @@ npm test           # vitest run — 333 tests / 25 files（純ロジックのみ
 | `doctor --run-dir <dir>` | 起動前バリデータ: `TOURNAMENT_INFO.json` 必須キー / `SCORING_RUBRIC.json` を確認 | 不要 |
 | `run --run-dir <dir>` | 縦串MVP を1周（test型: S3→S5→S6 / battle型: S6 対戦） | 必要 |
 | `evolve --seed N [--iterations N]` | D18① 数値最適化（じゃんけん重みを LLM 非依存で進化） | 不要 |
+| `quest --quest xq\|ai\|robo\|data [--seed N] [--generations N]` | 標準化フレームワーク: 4 クエストを同一ループで自律最適化（数値トラック・LLM 非依存） | 不要 |
 
 ```bash
 npm run taikai -- probe          # [probe] claude available: true / exit 0
@@ -108,6 +110,37 @@ npm run taikai -- evolve --seed 7
 # [evolve] evolvedParams={"rock":-0.589...,"paper":3.180...,"scissors":-0.566...}
 # 改善したら exit 0、しなければ exit 1
 ```
+
+### `quest` — 標準化フレームワーク（4 クエストを同一ループで自律最適化）
+
+**毛色の違う 4 クエスト（X / AI / Robo / Data）を 1 つの標準ハーネスで横断攻略する**コア機能。設計の正は [docs/quests.md](./docs/quests.md)。各クエストは `候補 → 評価(fitness) → 最適化 → 提出` の同じ4段ループに落ち、`QuestAdapter<NumericCandidate>` という**同一契約**で実装される。実行ループ（`runQuest`）・最適化器（`numericOptimizer` のヒルクライム＋ランダムリスタート）・提出物書き出しは**全クエストで無改変共有**し、差し替えるのは「候補キー・評価サイドカー（Python）・提出物整形」だけ。LLM CLI は一切不要・seed 固定で完全再現する。
+
+これは Optuna/DEAP のような数値探索専用ライブラリではなく、**評価関数を差すだけで任意ドメインを自律最適化する汎用候補最適化器**という立て付け。数値ベクタ最適化と「ゲーム AI の自己対戦」を実装済みで束ね、approach/コードを書き換える LLM 構造変異を同一インタフェースに将来統合する（現状は数値トラックのみ実動）。
+
+```bash
+npm run taikai -- quest --quest xq    # X Quest: 7並べ AI の 8 パラメータを自己対戦の順位点で最適化
+npm run taikai -- quest --quest ai    # AI Quest: ML の 5 ハイパラを held-out 検証精度で最適化
+npm run taikai -- quest --quest robo  # Robo Quest: 2輪到達の 5 制御ゲインをシミュ報酬で最適化
+npm run taikai -- quest --quest data  # Data Quest: 特徴選択 12 パラメータを held-out R^2 で最適化
+# 任意で --seed N（既定 42）/ --generations N（既定 15）。best は quests/<id>/best_params.json へ。
+```
+
+```
+[quest:ai-hyperopt] initial fitness=0.475
+[quest] best fitness=0.717 (evals=..., improved=true)
+[quest] best={"lr":...,"hidden":...} → quests/ai-hyperopt/best_params.json
+```
+
+| クエスト | `--quest` | 候補 | fitness（評価器） | サイドカー |
+|---|---|---|---|---|
+| X（ゲームAI） | `xq` | 7並べ AI の 8 探索パラメータ | 3人 self-play の着順加重 順位点（座席ローテで席バイアス除去） | `quests/xq-7narabe/evaluate.py` |
+| AI（ML） | `ai` | 5 ハイパラ（lr/reg/hidden/epochs/init_scale） | 合成データの held-out 検証精度 | `quests/ai-hyperopt/evaluate.py` |
+| Robo（制御） | `robo` | 5 制御ゲイン（kp_lin/kp_ang/kd_ang/align_thresh/v_cruise） | 2輪到達シミュの多エピソード平均報酬 | `quests/robo-control/evaluate.py` |
+| Data（分析） | `data` | 特徴選択 12 パラメータ（sel_0..sel_9＋sel_threshold＋ridge） | 合成テーブルの held-out 予測 R^2（リーク無し） | `quests/data-insight/evaluate.py` |
+
+各 `quests/<id>/evaluate.py` は**評価本体**（外部データ・物理エンジンに依存しない自己完結サイドカー）。TS アダプタは spawn して stdin に 1 行 JSON を渡し、stdout の fitness を読むだけ。4 つとも seed 固定で bit 一致する決定的評価器。実測（同一フレームワーク・seed 固定）— X: 既定 0.62 → 探索後 0.73 / AI: 0.475 → 0.717 / Robo: 0.813 → 0.922。Data は held-out R^2 に明確な勾配（特徴未選択 ≈ 0 → 真に効く 4 列を選ぶと ≈ 0.97）があり、数値の正は [`quests/data-insight/README`](./quests/data-insight/README.md)。
+
+実装済みは数値トラック（X/AI/Robo/Data の 4 クエスト）。**未実装**は AI/Robo/Data の LLM approach／コード変異ループと X の PIMC 探索プレイヤー（現 X はパラメータ化ヒューリスティック）。本格 GA（個体群＋交叉＋エリート保存）は `orchestrator/quest/populationGA.ts` に純ロジックで実装済みだが、各アダプタはヒルクライム経路で配線している。
 
 ### `run` — 縦串MVP（1大会 = 1 result）
 

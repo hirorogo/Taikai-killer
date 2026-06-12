@@ -84,6 +84,9 @@ async function main(): Promise<void> {
       } else if (which === "robo") {
         adapter = (await import("./quest/roboControlAdapter.ts")).roboControlAdapter;
         subDir = "quests/robo-control";
+      } else if (which === "data") {
+        adapter = (await import("./quest/dataInsightAdapter.ts")).dataInsightAdapter;
+        subDir = "quests/data-insight";
       } else {
         adapter = (await import("./quest/xqAdapter.ts")).xqAdapter;
         subDir = "quests/xq-7narabe";
@@ -107,7 +110,7 @@ async function main(): Promise<void> {
       break;
     }
     default:
-      console.error("usage: taikai <probe|run|doctor|status|evolve|experiment|quest> [--run-dir <path>] [--quest xq] [--generations N] [--rounds N] [--topK N] [--seed N] [--iterations N]");
+      console.error("usage: taikai <probe|run|doctor|status|evolve|experiment|quest> [--run-dir <path>] [--quest xq|ai|robo|data] [--generations N] [--rounds N] [--topK N] [--seed N] [--iterations N]");
       process.exit(2);
   }
 }
