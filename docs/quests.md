@@ -426,6 +426,47 @@ npm run taikai -- coevolve --quest xq [--seed N] [--generations N] [--promote-ma
 > **正直な結論**: 短い coevolution run（小 budget）でも、Hall of Fame ありの champion は **対 random で既定を明確に上回り（0.717→0.737）、対 medium でも既定を下回らない**（初期 run にあった drift が消えた＝両 seed とも medium ≥ 既定、first_place_rate も改善）。一方で対 medium の平均は HoF なしと同値で、**「coevolution が固定 fitness を桁で超えた」とまでは言えない**（誇張しない）。前進は「退行を消して両ベンチで既定以上を安定化」した点。
 > **次の改善余地**: (a) 事前実行＝時間制約なし（§4.1）を活かし rounds/popSize/games/archiveSize を大幅増、(b) PIMC（§4.2）など表現力の高い方策を候補/相手に入れて 8 係数ヒューリスティックの天井（§7.5-1）を上げる。
 
+### 7.6 総当たりトーナメント（混合フィールドの地に足のついた順位・measure-before-optimize）
+
+vs random / vs medium の **1 対 1 ベンチ**は相手依存で intransitivity を見落とす（§7.5）。そこで全 AI を
+**同一エンジンの 3 人卓で総当たり**させ（`quests/xq-7narabe/tournament.py`・席ローテで席順バイアス除去・
+決定的）、混合フィールドでの本当の強さ順を測った。
+
+**実測（安価 4 体・games/triple=300＝各 AI 900 局・seed=0・MC 除外で清明化）**:
+
+| 順位 | AI | rank_score（順位点平均） | first_rate（1着率） |
+|---|---|---|---|
+| 1 | **heuristic（既定 params）** | **0.562** | 0.408 |
+| 2 | medium | 0.544 | 0.398 |
+| 3 | **champion（coevolution）** | 0.524 | 0.369 |
+| 4 | random | 0.370 | 0.159 |
+
+> **重要な発見（誇張せず正直に）**: **coevolution champion は混合フィールドで既定ヒューリスティックに
+> 負けている**（0.524 < 0.562）。§7.5 では champion は **対 random 単体**で既定を上回った（0.737>0.717）
+> のに、**多人数の混合卓では既定より弱い**——これは典型的な intransitivity（自己対戦に過適合し、多様な
+> 相手が混ざる本番条件で後退）。**自己対戦のみの coevolution は本番の強さを保証しない**ことの実測証拠。
+> **競技への含意**: 現状そのまま出すなら **champion より既定ヒューリスティックの方が安全**。coevolution を
+> 活かすには、自己対戦だけでなく **混合フィールド（random/medium/過去 champion を相手プールに常設）を
+> fitness に組み込む**（trainer の相手分布 = 本番分布に近づける）必要がある。これが次の具体的改善点。
+
+**実測（MC 込み 5 体・games/triple=30＝各 AI 180 局・mc_sim=20・seed=0）**:
+
+| 順位 | AI | rank_score | first_rate | 注意 |
+|---|---|---|---|---|
+| 1 | mc(sim=20) | 0.583 | 0.456 | ↓ の通り過大評価の疑い |
+| 2 | champion | 0.528 | 0.356 | 中位は 180 局でノイズ大 |
+| 3 | heuristic | 0.506 | 0.372 | 〃 |
+| 4 | medium | 0.494 | 0.322 | 〃 |
+| 5 | random | 0.389 | 0.161 | 明確に最弱 |
+
+> **MC の解釈（誇張しない）**: この卓で MC が首位に見えるが **(a) 弱い random が同卓に混ざる混合
+> フィールドで稼いだ過大評価**（`evaluate_mc.py` の **強相手のみ**＝対ヒューリスティック2体では MC は
+> ≈0.45＝互角以下）、**(b) 180 局は 900 局清明 run よりノイズが大きく**中位 3 者（champion/heuristic/
+> medium）の順位は誤差内。よって **「MC（PIMC）が最強」とは言えない**: MC は弱い相手には大勝するが
+> 強い相手には互角止まり、というのが正直な像（§4.2 の弱さ確認とも整合）。robust な結論は清明 4 体 run の
+> 「**champion < heuristic**」。
+> **決定性**: 同一引数の 2 回 run が bit 一致を確認（`tournament.py` は seed 派生で完全再現）。
+
 ---
 
 ## 関連
