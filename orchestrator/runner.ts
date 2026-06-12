@@ -533,9 +533,20 @@ async function implementStrategyTest(
   return { strategyId: strategy.id, passed, ratio, attempts, maxAttempts };
 }
 
-/** S3: 戦略を生成（厳格化リトライ＋dedup＋cold-start filter）。実験/単発で共用可。 */
-async function generateStrategies(spec: string, rubric: ScoringRubric): Promise<Strategy[]> {
-  const base = `${readFileSync(MVP_PHASES["S3"]!.promptPath, "utf8")}\n\n## 課題仕様\n${spec}\n\n## 評価\neval_mode=${rubric.eval_mode}, metrics=${rubric.metrics.map((m) => m.name).join(",")}\n\nStrategy[] の JSON だけを出力（id/origin/approach）。origin は "requirement" か "subject"。多様なアプローチを3〜5個。`;
+/** S3: 戦略を生成（厳格化リトライ＋dedup＋cold-start filter）。実験/単発/ループで共用可。
+ *  priorWinners があれば「いいとこ取り」: 高得点 approach を種に改良・組合せさせる（結果再投入）。 */
+async function generateStrategies(
+  spec: string,
+  rubric: ScoringRubric,
+  priorWinners?: { approach: string; ratio: number }[],
+): Promise<Strategy[]> {
+  const seed =
+    priorWinners && priorWinners.length > 0
+      ? `\n\n## これまでの高得点戦略（いいとこ取りして改良・組合せ、さらに強い新戦略を出せ。丸写しは禁止）\n${priorWinners
+          .map((w, i) => `${i + 1}. (score=${w.ratio.toFixed(3)}) ${w.approach}`)
+          .join("\n")}`
+      : "";
+  const base = `${readFileSync(MVP_PHASES["S3"]!.promptPath, "utf8")}\n\n## 課題仕様\n${spec}\n\n## 評価\neval_mode=${rubric.eval_mode}, metrics=${rubric.metrics.map((m) => m.name).join(",")}${seed}\n\nStrategy[] の JSON だけを出力（id/origin/approach）。origin は "requirement" か "subject"。多様なアプローチを3〜5個。`;
   let strategies: Strategy[] | null = null;
   for (let tryN = 1; tryN <= 3 && !strategies; tryN++) {
     const strict = tryN === 1 ? "" : "\n\n⚠ 出力は JSON 配列のみ。先頭 `[` 末尾 `]`。地の文禁止。";
@@ -624,6 +635,98 @@ export async function runExperiment(
   writeJson(join(runDir, "experiment_summary.json"), summary);
   await notify(runDir, { type: "experiment_complete", best: best?.strategyId, ratio: best?.ratio });
   console.log(`\n[experiment] 勝者=${best?.strategyId ?? "?"} ratio=${best?.ratio.toFixed(3) ?? "?"} / 試行 ${outcomes.length} 戦略 → experiment_summary.json`);
+}
+
+/**
+ * ぐるぐる回る本体（docs の S1→S6 無限ループの test 型実体）。
+ * S1(一度) → [S3 戦略生成(前round勝者を種=いいとこ取り) → S5 実装 → S6 採点 → 結果再投入]* を
+ * 改善が止まる(patience)か maxRounds まで回し続ける。現時点の最強を出し続ける。
+ */
+export async function runLoop(
+  runDir: string,
+  opts: { maxRounds?: number; topK?: number; patience?: number } = {},
+): Promise<void> {
+  ensureDirs(runDir);
+  await doctor(runDir);
+  const ti = readJson<TournamentInfo>(tournamentInfoPath(runDir));
+  const rubric = readJson<ScoringRubric>(scoringRubricPath(runDir));
+  if (rubric.eval_mode !== "test") {
+    console.error("[loop] 現状 test 型のみ（battle は run を使う）");
+    process.exit(2);
+  }
+  const spec = existsSync(join(runDir, "spec.md")) ? readFileSync(join(runDir, "spec.md"), "utf8") : ti.name;
+  const runId = relative("outputs", runDir) || "run";
+  const maxRounds = Math.max(1, opts.maxRounds ?? 50);
+  const topK = Math.max(1, opts.topK ?? 2);
+  const patience = Math.max(1, opts.patience ?? 4);
+  pipelineStarted(runDir, runId);
+
+  const outcomes: { strategyId: string; approach: string; ratio: number }[] = [];
+  let best: { strategyId: string; approach: string; ratio: number } | null = null;
+  let noImprove = 0;
+  let batch = 0;
+  const progression: { round: number; best_ratio: number; strongest: string }[] = [];
+
+  for (let round = 1; round <= maxRounds; round++) {
+    // いいとこ取り: これまでの上位 approach を種に再投入
+    const priorTop = [...outcomes].sort((a, b) => b.ratio - a.ratio).slice(0, 2).map((o) => ({ approach: o.approach, ratio: o.ratio }));
+    const fresh = (await generateStrategies(spec, rubric, priorTop.length ? priorTop : undefined)).map((s) => ({
+      ...s,
+      id: `r${round}-${s.id}`,
+    }));
+    if (fresh.length === 0) {
+      console.log(`[loop] round ${round}: 戦略生成0 → スキップ`);
+      continue;
+    }
+    const targets = fresh.slice(0, topK);
+    console.log(`\n=== round ${round}/${maxRounds} (best=${best?.ratio.toFixed(3) ?? "-"}) ===`);
+    let improvedThisRound = false;
+    for (const strat of targets) {
+      const oc = await implementStrategyTest(runDir, strat, ti, spec, MVP_PHASES["S5"]!.maxAttempts ?? 3, batch++);
+      const rec = { strategyId: oc.strategyId, approach: strat.approach, ratio: oc.ratio };
+      outcomes.push(rec);
+      appendLeaderboard({
+        run_id: runId, strategy_id: oc.strategyId, rubric_ref: rubric.derived_from,
+        score: oc.ratio, passed_test_ratio: oc.ratio, result_ref: resultPath(runDir), ts: isoNow(),
+      });
+      console.log(`  ${oc.strategyId}: ratio=${oc.ratio.toFixed(3)}`);
+      if (!best || oc.ratio > best.ratio) {
+        best = rec;
+        improvedThisRound = true;
+      }
+    }
+    // 現時点の最強を result.json に出し続ける
+    if (best) {
+      const result: BenchResult = {
+        result_id: `${runId}-r${round}`, strategy_id: best.strategyId, rubric_ref: rubric.derived_from,
+        eval_mode: "test", score: best.ratio, rank: 1, metrics: { passed_test_ratio: best.ratio },
+        passed_test_ratio: best.ratio, threshold: [],
+      };
+      writeJson(resultPath(runDir), result);
+    }
+    progression.push({ round, best_ratio: best?.ratio ?? 0, strongest: best?.strategyId ?? "?" });
+    phaseCompleted(runDir, "S6", "ok");
+    console.log(`[loop] 現最強=${best?.strategyId ?? "?"} ratio=${best?.ratio.toFixed(3) ?? "?"}`);
+
+    noImprove = improvedThisRound ? 0 : noImprove + 1;
+    if (best && best.ratio >= 1.0) {
+      console.log(`[loop] 満点到達 → 収束`);
+      break;
+    }
+    if (noImprove >= patience) {
+      console.log(`[loop] ${patience} round 改善なし → 収束`);
+      break;
+    }
+  }
+
+  writeJson(join(runDir, "loop_summary.json"), {
+    run_id: runId, rounds_run: progression.length, strategies_tried: outcomes.length,
+    strongest: best, progression,
+  });
+  const arch = archiveRun(runDir);
+  writeJson(join(runDir, "archive_manifest.json"), arch);
+  await notify(runDir, { type: "loop_complete", strongest: best?.strategyId, ratio: best?.ratio, rounds: progression.length });
+  console.log(`\n[loop] 完了: ${progression.length} round / ${outcomes.length} 戦略 / 最強=${best?.strategyId ?? "?"} ratio=${best?.ratio.toFixed(3) ?? "?"}`);
 }
 
 /** resume: 通過済み S5 attempt（newly_passed_ids 非空）が partial にあるか（D9/AC5）。 */
