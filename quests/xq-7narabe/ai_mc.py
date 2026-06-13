@@ -184,17 +184,28 @@ def make_mc_ai(
         playout_fns = [playout_fn] * state.players_num
         n_players = state.players_num
 
+        # ── Common Random Numbers（共通乱数・分散削減）──
+        # 全候補手を **同一の決定化集合**（同じ相手手札）で評価する。手 index を seed に混ぜず
+        # sim_idx だけで決定化を作るので、手 A と手 B は同じ盤面サンプル上で比較される（paired）。
+        # これにより「手の差」の推定分散が激減し、決定化ノイズに手の優劣が埋もれる旧挙動
+        # （sim_count を増やしても弱い・§7.6/§4.2）を直す。State.next は非破壊なので 1 つの det を
+        # 全手で使い回せる。
+        dets = [
+            _determinize(
+                state,
+                root_seat,
+                random.Random(_derive_seed(base_seed, board_fp, root_seat, 0, sim_idx)),
+            )
+            for sim_idx in range(n_sims)
+        ]
+
         best_action: Optional[Card] = None
         best_score = -1.0  # 期待着順スコア（0..1）の最大。同点は後の str 昇順で割る。
 
-        for move_idx, action in enumerate(actions):
+        for action in actions:
             total = 0.0
-            for sim_idx in range(n_sims):
-                sim_seed = _derive_seed(
-                    base_seed, board_fp, root_seat, move_idx, sim_idx
-                )
-                det = _determinize(state, root_seat, random.Random(sim_seed))
-                # root が手 action を打った独立盤面。det は非破壊なのでそのまま next できる。
+            for det in dets:
+                # root が手 action を打った独立盤面。det は非破壊なので全手で共有して next できる。
                 after = det.next(action, pass_flag=0)
                 finish = _playout_order(after, playout_fns)
                 total += _rank_score(finish, root_seat, n_players)

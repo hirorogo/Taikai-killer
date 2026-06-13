@@ -233,7 +233,9 @@ X Quest の題材として**7並べ**（不完全情報・多人数）を最初�
 
 - 評価器（N人同卓1局→順位点）は `evaluate.py` に実装済み。最適化は数値トラック（`optimize()`、決定的・seed 固定で再現）を**そのまま流用**している（`optimize` は fitness スカラしか見ないので評価器の中身に非依存）。TS 側 `xqAdapter.evaluate` が `evaluate.py` を spawn し、`runQuest`→`numericOptimizer` がパラメータを進化させる。
 
-- **簡易 PIMC（決定化 MC）実装の現況と限界（`ai_mc.py`／`evaluate_mc.py`）**: §4.2 で参照する PIMC 系プレイヤーの簡易版が `quests/xq-7narabe/ai_mc.py`（`make_mc_ai`）として**実装済み・単体実行可能**で、対ヒューリスティック評価サイドカー `evaluate_mc.py` も揃っている（決定的・seed 固定で bit 一致）。ただし **(a) orchestrator の数値トラックには未配線**（`xqAdapter` は `evaluate.py`＝ヒューリスティックを spawn し、MC は本経路に乗らない）、**(b) 対ヒューリスティック勝ち越しが未確立**（プレイアウト方策が相手と同一 params のため 1 手読みの利得が席運・分散に埋もれ、**既定 seed=0 では win_rate≈0.43 で 0.5 を割る**。seed・budget で 0.5 前後に揺れる）。よって本ハーネスが taikai quest で実際に回すのは**ヒューリスティック数値トラックのみ**であり、MC プレイヤーの優位は本書では主張しない（実装の存在と未確立性を併記する正直版）。
+- **簡易 PIMC（決定化 MC）実装の現況と限界（`ai_mc.py`／`evaluate_mc.py`）**: §4.2 で参照する PIMC 系プレイヤーの簡易版が `quests/xq-7narabe/ai_mc.py`（`make_mc_ai`）として**実装済み・単体実行可能**で、対ヒューリスティック評価サイドカー `evaluate_mc.py` も揃っている（決定的・seed 固定で bit 一致）。ただし **(a) orchestrator の数値トラックには未配線**（`xqAdapter` は `evaluate.py`＝ヒューリスティックを spawn し、MC は本経路に乗らない）、**(b) 対ヒューリスティック勝ち越しは budget 依存**。
+  - **改善: Common Random Numbers（共通乱数・2026-06-13）**: 旧実装は手ごとに別々の決定化（相手手札サンプル）を引いていたため「手の差」が決定化分散に埋もれていた。全候補手を**同一の決定化集合**で評価する paired 比較に変更（`ai_mc.py` の action_fn・`State.next` 非破壊を利用して 1 det を全手で共有）。**実測 A/B（games=100, sim_count=100, 同一設定）**: seed0 0.49→**0.53**、seed7 0.38→**0.44**（両 seed 改善・平均 +0.05）。低 sim_count（=60）regime ではノイズに埋もれ中立〜微減だが、**本番が想定する高 sim_count regime では改善**（§4.1「事前実行で本数を上げる」と整合）。
+  - それでも 1 着率は 0.5 前後で**「ヒューリスティックを明確に上回る」とまでは未確立**（CRN は分散を減らすが strategy-fusion 由来の**バイアス**は残る）。MC は高分散の「1着狙い」方策で、平均着順（rank_score）は中位（§7.6 総当たり）。よって本ハーネスが taikai quest で実際に回すのは**ヒューリスティック数値トラックのみ**であり、MC の優位は本書では主張しない（実装の存在・CRN 改善・未確立性を併記する正直版）。
 
 ```
 [事前実行 / オフライン]                                  [本番]
