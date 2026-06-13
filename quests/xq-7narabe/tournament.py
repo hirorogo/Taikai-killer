@@ -65,10 +65,14 @@ def build_pool(mc_sim: int) -> "list[tuple[str, AIFactory]]":
         ("heuristic", lambda s: make_ai(default_params(), seed=s)),
         ("champion", lambda s: make_ai(champ, seed=s)),
     ]
-    # 混合フィールド最適化の champion があれば加える（§7.6 仮説の検証用）。
+    # 混合フィールド最適化の champion があれば加える（§7.6/§7.7 検証用）。
     mixed = _load_params("mixed_champion_params.json")
     if mixed is not None:
         pool.append(("mixed_champ", lambda s: make_ai(mixed, seed=s)))
+    # v1（旧 mixed champion）が別ファイルで残っていれば head-to-head 比較用に加える。
+    mixed_v1 = _load_params("mixed_champion_v1.json")
+    if mixed_v1 is not None:
+        pool.append(("mixed_v1", lambda s: make_ai(mixed_v1, seed=s)))
     if mc_sim > 0:
         pool.append((f"mc(sim={mc_sim})", lambda s: make_mc_ai(default_params(), sim_count=mc_sim, seed=s)))
     return pool

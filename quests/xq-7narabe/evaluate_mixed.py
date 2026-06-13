@@ -24,6 +24,7 @@
 from __future__ import annotations
 
 import json
+import os
 import random
 import sys
 
@@ -36,14 +37,31 @@ _SEED_DEFAULT = 0
 _OPPONENTS_DEFAULT = 2  # 候補以外の人数（3 人戦）。
 # 混合フィールドの相手種別（本番に近い多様性）。default heuristic も入れて「強い相手」を含める。
 _FIELD = ("random", "medium", "heuristic")
+# 任意の対戦相手アーカイブ（Hall of Fame 相当）。存在すれば各 params を heuristic 相手として
+# フィールドに加える（強い相手＝過去 champion を field に常設し、それにも勝てる params を促す）。
+_FIELD_ARCHIVE_FILE = "field_archive.json"
 
 
-def _make_opponent(kind: str, seed: int):
-    """相手種別 → action_fn（決定的）。heuristic は既定 params の make_ai。"""
+def _load_field_archive() -> "list[dict]":
+    """field_archive.json（param dict のリスト）を読む。無ければ空（既定の 3 種だけで戦う）。"""
+    path = os.path.join(os.path.dirname(__file__), _FIELD_ARCHIVE_FILE)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return [p for p in data if isinstance(p, dict)] if isinstance(data, list) else []
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _make_opponent(kind: str, seed: int, archive: "list[dict]"):
+    """相手種別 → action_fn（決定的）。kind は _FIELD のいずれか、または "arch:<i>"（アーカイブ i 番目）。"""
     if kind == "medium":
         return make_medium(seed=seed)
     if kind == "heuristic":
         return make_ai(default_params(), seed=seed)
+    if kind.startswith("arch:"):
+        idx = int(kind[len("arch:"):])
+        return make_ai(archive[idx], seed=seed)
     return random_action_fn(random.Random(seed))
 
 
@@ -60,6 +78,9 @@ def evaluate(params: dict, games: int, seed: int, opponents: int) -> dict:
     players_num = n_opp + 1
 
     ai_fn = make_ai(params, seed=seed)
+    archive = _load_field_archive()
+    # 相手種別プール = 既定 3 種 + アーカイブ（arch:0..）。アーカイブがあれば強い相手の比率が上がる。
+    kinds = list(_FIELD) + [f"arch:{i}" for i in range(len(archive))]
 
     fitness_sum = 0.0
     first_places = 0
@@ -76,8 +97,8 @@ def evaluate(params: dict, games: int, seed: int, opponents: int) -> dict:
             else:
                 # (seed, g, seat_idx) から相手種別と相手 seed を決定的に選ぶ。
                 pick = ((seed * 1_000_003) ^ (g * 2_246_822_519) ^ ((seat_idx + 1) * 40_503)) & 0x7FFF_FFFF
-                kind = _FIELD[pick % len(_FIELD)]
-                fns.append(_make_opponent(kind, pick))
+                kind = kinds[pick % len(kinds)]
+                fns.append(_make_opponent(kind, pick, archive))
 
         finish_order = play_table(fns, seed=deal_seed, players_num=players_num)
         rank = finish_order.index(seat) + 1
@@ -91,7 +112,7 @@ def evaluate(params: dict, games: int, seed: int, opponents: int) -> dict:
         "first_place_rate": first_places / n_games,
         "avg_rank": rank_sum / n_games,
         "games": n_games,
-        "field": list(_FIELD),
+        "field": kinds,
     }
 
 

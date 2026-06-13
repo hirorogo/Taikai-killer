@@ -494,6 +494,15 @@ vs random / vs medium の **1 対 1 ベンチ**は相手依存で intransitivity
 > **競技への含意（更新）**: §7.6 の「champion より既定が安全」は **mixed_champ で解消**——本番に出すなら
 > 自己対戦 champion でなく **mixed_champ**（または heuristic）が妥当。trainer の相手分布 = 本番分布、が要。
 
+**負の結果（重要・over-engineering の戒め）**: 「フィールドに過去 champion を常設（`evaluate_mixed.py` の
+`field_archive.json`）＋ GA budget 増（pop12/gen10）すればもっと強くなる」を試したら **逆効果**だった。
+v2 は**訓練評価器では改善**（0.575→0.605）したのに、**独立総当たり（各3000局）では 0.494 と v1（0.538）
+より悪化**——random 以外の全 AI に負けた。params も歪み（w_random_jitter が負・係数が極端）で典型的な
+**過適合**。教訓: **相手プールを特定 champion で狭く・厚くする＋budget を盛る**と、その特定フィールドに
+過剰最適化して**汎化が落ちる**。**単純で多様なフィールド（random/medium/heuristic）＋控えめ budget の v1
+の方が頑健**。→ `field_archive.json` は既定で置かない（capability は `evaluate_mixed.py` に残すが既定 off）、
+`mixed_champion_params.json` は **v1 を採用**。"measure-before-optimize" は "more-is-better" を否定することもある。
+
 ---
 
 ## 関連
