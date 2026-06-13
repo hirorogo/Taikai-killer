@@ -137,6 +137,20 @@ export interface QuestAdapter<Candidate> {
 | **Data**（分析） | **特徴選択＋正則化の 12 パラメータ**（sel_0..sel_9 の特徴選択重み＋sel_threshold＋ridge＝`NumericCandidate`） | **held-out 予測 R^2**（`evaluate.py`：seed 固定の合成テーブルで「効く特徴を選び・紛らわしいノイズ列を選ばない」質を held-out R^2 で測る。リーク無し＝標準化は train 統計のみ） | **ヒルクライム+リスタート**（数値・LLM不要／D18①。numericOptimizer 直結） | **実装・実動**: `quests/data-insight/evaluate.py`＋`dataInsightAdapter.ts`→`runQuest.ts`→`numericOptimizer`。xqAdapter と同一契約・最適化器無改変共有。分析コードを LLM が生成する構造変異は未実装（数値＝特徴選択トラックのみ） |
 | **Robo**（制御） | **5 制御ゲイン**（kp_lin/kp_ang/kd_ang/align_thresh/v_cruise＝`NumericCandidate`） | **シミュ報酬**（`sim.py`：決定的 2 輪到達シミュ、`evaluate.py` が多エピソード平均報酬を fitness） | **ヒルクライム+リスタート**（数値・LLM不要／D18①。numericOptimizer 直結） | **実装・実動**: `quests/robo-control/{sim.py,evaluate.py}`＋`roboControlAdapter.ts`→`runQuest.ts`→`numericOptimizer`。xqAdapter と同一契約・最適化器無改変共有。方策骨子の LLM 変異は未実装（数値トラックのみ） |
 
+**実測: 3 クエスト横断の最適化が held-out で汎化する（2026-06-13・GA pop8/gen6/seed42 で最適化 → 別 seed=999 で再採点）**:
+
+| クエスト | 訓練 seed42 fitness（init→best） | **held-out seed999（default→best）** | 汎化 |
+|---|---|---|---|
+| AI（held-out 精度） | 0.475→0.692 | **0.533→0.675**（+0.142） | ◎ 汎化 |
+| Robo（シミュ報酬） | 0.813→0.909 | **0.783→0.911**（+0.128） | ◎ 汎化 |
+| Data（held-out R^2） | 0.892→0.895 | **0.927→0.930**（+0.003） | ○ 既定が飽和気味・微増 |
+
+> **結論**: 標準化フレームワーク（QuestAdapter + numericOptimizer/GA を無改変共有）は **AI/Robo/Data の
+> 3 ドメインで実際に最適化し、しかも別 seed の held-out でも改善が保たれる**（過適合でない）。これは
+> X Quest の自己対戦 champion が過適合した（§7.6）のと対照的——**fitness が真の目的（held-out 性能）と
+> 整合しているドメインでは汎化し、狭い proxy（自己対戦勝率）だと過適合する**。X の mixed-field 修正（§7.7）が
+> 効いたのは、fitness を真の目的（混合卓性能）に揃え直したから、という一貫した理解が得られる。
+
 判定語（[implementation-status.md](./implementation-status.md) と同義）:
 - **実装・実動** = `outputs/`・`best_params.json` に実 run 成果物がある or テスト緑で配線済み（orchestrator の数値トラックに配線済み）。
 - **実装済み・未配線** = 該当コードは実在し単体で実行可能だが、orchestrator の本経路（`taikai quest`）には繋がっていない。例: `orchestrator/quest/populationGA.ts`（個体群 GA）、`quests/xq-7narabe/ai_mc.py`（簡易 PIMC=決定化 MC プレイヤー `make_mc_ai`）＋`evaluate_mc.py`（その評価サイドカー）。これらは存在するが `xqAdapter` は `ai_param` ヒューリスティックを spawn するため、数値トラックには未配線。
