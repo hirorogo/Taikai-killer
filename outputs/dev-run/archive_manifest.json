@@ -1,0 +1,77 @@
+{
+  "files": [
+    {
+      "path": "SCORING_RUBRIC.json",
+      "bytes": 251,
+      "sha256": "44246f7594e7063c343165401446282939eafc76643a001c1fde96f3a6bdbcd2"
+    },
+    {
+      "path": "TOURNAMENT_INFO.json",
+      "bytes": 240,
+      "sha256": "d652df1499e8c241defc775a57b58eb69316cdddc42fc2c8b8df87969667c762"
+    },
+    {
+      "path": "events/pipeline.jsonl",
+      "bytes": 540,
+      "sha256": "0a887e22e20b5ace079450298e6e9218a502dc9297de65a5c355b8c40f5568b6"
+    },
+    {
+      "path": "partials/S3_PARTIAL_W0B0_2026-06-11T14-48-19.775Z.json",
+      "bytes": 664,
+      "sha256": "4fe70afb16d7e30bc711c23dacf336b74a584ba4c20d3da2a786d780fe3af330"
+    },
+    {
+      "path": "partials/S3_PARTIAL_W0B1_2026-06-11T14-48-19.776Z.json",
+      "bytes": 684,
+      "sha256": "f8d4e27a802ad365c504762b389a0efbb5a3e6035628f8e0b488a5de10ac3188"
+    },
+    {
+      "path": "partials/S3_PARTIAL_W0B2_2026-06-11T14-48-19.776Z.json",
+      "bytes": 681,
+      "sha256": "c76cfb11a6dd14f53bd70582287f00090623bad5f9d7e62baf8b833c384b94c3"
+    },
+    {
+      "path": "partials/S5_PARTIAL_W0B1_2026-06-11T14-48-23.707Z.json",
+      "bytes": 503,
+      "sha256": "33a648c8d92e29753b85aa80ad0b37aa0bed9fa18120b235493b906523946292"
+    },
+    {
+      "path": "projects/S3-fizzbuzz-001/manifest.json",
+      "bytes": 162,
+      "sha256": "13fd69606cc7fc709dea6152225e0bc88c640aea063f6c42b8b83b3fbde37c65"
+    },
+    {
+      "path": "projects/S3-fizzbuzz-001/src/__pycache__/main.cpython-312.pyc",
+      "bytes": 504,
+      "sha256": "904b4fafeaea7c07f63cf7854909766860254230b3fa09308dd1a654da17cc68"
+    },
+    {
+      "path": "projects/S3-fizzbuzz-001/src/main.py",
+      "bytes": 175,
+      "sha256": "a1d9916438350f510c8747c22c24d21b8fa86a2ff4b2aea74b29d6b3aa52328e"
+    },
+    {
+      "path": "projects/S3-fizzbuzz-001/tests/test_fizzbuzz.py",
+      "bytes": 1125,
+      "sha256": "cdedb348c5ae413fee6e1b07d15e1cac4bc61a4988f175b6bd815965b8175aaf"
+    },
+    {
+      "path": "result.json",
+      "bytes": 244,
+      "sha256": "851374a3bd916d58049eaf1cec4773572869a1f8fd77c42839a69cea5431746f"
+    },
+    {
+      "path": "spec.md",
+      "bytes": 354,
+      "sha256": "9acc29adc36bbde241f6e3efb3297024550055935f9a1573dd9408a7a0d78b4f"
+    },
+    {
+      "path": "tests/test_fizzbuzz.py",
+      "bytes": 1125,
+      "sha256": "cdedb348c5ae413fee6e1b07d15e1cac4bc61a4988f175b6bd815965b8175aaf"
+    }
+  ],
+  "file_count": 14,
+  "total_bytes": 7252,
+  "manifest_sha256": "f9de9e54727a649bb68033c1deb0010a46409e688c4f07d034de68fbb3b26d13"
+}

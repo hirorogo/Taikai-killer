@@ -1,0 +1,17 @@
+{
+  "run_id": "multi-run",
+  "rounds_run": 1,
+  "strategies_tried": 2,
+  "strongest": {
+    "strategyId": "r1-S3-001",
+    "approach": "正規表現フルマッチ方式。parse_duration は `^(?:(0|[1-9]\\d*)h)?(?:(0|[1-9]\\d*)m)?(?:(0|[1-9]\\d*)s)?$` で fullmatch し、(a) bool を最優先で TypeError、(b) str 以外 TypeError、(c) マッチ失敗 or 全グループ None（=単位ゼロ個）を ValueError とする。各グループの数値表現 `(0|[1-9]\\d*)` が「先頭ゼロ禁止・0単体可」を一括で保証し、順序・重複・空白も正規表現が構造的に弾く。format_duration は h=sec//3600, m=sec%3600//60, s=sec%60 を計算し 0 の単位を省略、全0なら '0s'。add は parse+parse→format の合成。bool/負値判定は両関数とも isinstance(x, bool) を int 判定より先に置く。",
+    "ratio": 1
+  },
+  "progression": [
+    {
+      "round": 1,
+      "best_ratio": 1,
+      "strongest": "r1-S3-001"
+    }
+  ]
+}

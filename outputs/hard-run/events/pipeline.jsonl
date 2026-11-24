@@ -1,0 +1,4 @@
+{"type":"PipelineStarted","run_id":"hard-run","ts":"2026-06-11T14:27:13.860Z"}
+{"type":"PhaseCompleted","phase":"S3","status":"ok","ts":"2026-06-11T14:27:51.922Z"}
+{"type":"PhaseCompleted","phase":"S5","status":"ok","ts":"2026-06-11T14:28:11.825Z"}
+{"type":"PhaseCompleted","phase":"S6","status":"ok","ts":"2026-06-11T14:28:11.922Z"}

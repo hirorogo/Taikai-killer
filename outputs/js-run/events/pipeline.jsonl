@@ -1,0 +1,7 @@
+{"type":"PipelineStarted","run_id":"js-run","ts":"2026-06-11T14:58:20.326Z"}
+{"type":"PhaseStarted","phase":"S3","ts":"2026-06-11T14:58:20.327Z"}
+{"type":"PhaseCompleted","phase":"S3","status":"ok","ts":"2026-06-11T14:58:35.764Z"}
+{"type":"PhaseStarted","phase":"S5","ts":"2026-06-11T14:58:35.765Z"}
+{"type":"PhaseCompleted","phase":"S5","status":"ok","ts":"2026-06-11T14:58:41.603Z"}
+{"type":"PhaseStarted","phase":"S6","ts":"2026-06-11T14:58:41.603Z"}
+{"type":"PhaseCompleted","phase":"S6","status":"ok","ts":"2026-06-11T14:58:41.693Z"}

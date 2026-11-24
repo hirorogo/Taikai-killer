@@ -1,0 +1,22 @@
+{
+  "id": "S3:0.2",
+  "phase": "S3",
+  "worker": 0,
+  "batch": 2,
+  "timestamp": "2026-06-11T14:48:19.776Z",
+  "schema_version": "0",
+  "status": "ok",
+  "provenance": {
+    "produced_by": "S3",
+    "derived_from": [
+      "rubric:toy-fizzbuzz-rules"
+    ],
+    "timestamp": "2026-06-11T14:48:19.776Z",
+    "agent": "claude"
+  },
+  "payload": {
+    "id": "S3-fizzbuzz-003",
+    "origin": "subject",
+    "approach": "(divisor, word)のテーブル[(3,\"Fizz\"),(5,\"Buzz\")]を走査して該当ワードを連結し、空ならstr(n)。ルール追加に強いデータ駆動構成。題材の「3の倍数/5の倍数」という規則性をデータとして表現する。"
+  }
+}

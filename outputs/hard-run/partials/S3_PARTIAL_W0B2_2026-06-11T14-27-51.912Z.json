@@ -1,0 +1,22 @@
+{
+  "id": "S3:0.2",
+  "phase": "S3",
+  "worker": 0,
+  "batch": 2,
+  "timestamp": "2026-06-11T14:27:51.912Z",
+  "schema_version": "0",
+  "status": "ok",
+  "provenance": {
+    "produced_by": "S3",
+    "derived_from": [
+      "rubric:toy-hard-roman-rules"
+    ],
+    "timestamp": "2026-06-11T14:27:51.912Z",
+    "agent": "claude"
+  },
+  "payload": {
+    "id": "S3-roman-explicit-rules",
+    "origin": "requirement",
+    "approach": "正規表現に頼らず明示ルールで検証する方針（規則の可読性・デバッグ性重視）。from_roman: (1) str/空/文字集合チェック (2) 同一記号4連続を走査検出 (3) V,L,D の出現回数>=2 を検出 (4) 隣接ペアを見て『小→大』が IV IX XL XC CD CM の6許可ペア以外なら不正 (5) 減算が起きた桁より後に同じ/大きい桁の再登場（IXI,VIV 等）を順序単調性チェックで検出 (6) これら全通過後に値を計算。to_roman は貪欲テーブル法、bool 排除と範囲チェックを先頭に置く。各ルールを独立関数化して S6 のテストで個別に潰せる構成。"
+  }
+}

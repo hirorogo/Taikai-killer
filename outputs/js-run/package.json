@@ -1,0 +1,7 @@
+{
+  "name": "toy-js-parens",
+  "version": "0.0.0",
+  "private": true,
+  "type": "commonjs",
+  "description": "toy-js-parens フィクスチャ。src/main.js は CommonJS（module.exports）。リポジトリ root の type:module を上書きして node tests/test.js を CJS で動かす。"
+}

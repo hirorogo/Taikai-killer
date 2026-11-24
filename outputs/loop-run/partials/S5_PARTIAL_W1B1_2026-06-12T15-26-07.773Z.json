@@ -1,0 +1,28 @@
+{
+  "id": "S5:1.1",
+  "phase": "S5",
+  "worker": 1,
+  "batch": 1,
+  "timestamp": "2026-06-12T15:26:07.773Z",
+  "schema_version": "0",
+  "status": "ok",
+  "provenance": {
+    "produced_by": "S5",
+    "derived_from": [
+      "r1-S3-002"
+    ],
+    "timestamp": "2026-06-12T15:26:07.773Z",
+    "agent": "claude"
+  },
+  "payload": {
+    "attempt": 1,
+    "code_ref": "src/main.py",
+    "passed_anchor_ids": [
+      "all"
+    ],
+    "newly_passed_ids": [
+      "all"
+    ],
+    "regressed": false
+  }
+}

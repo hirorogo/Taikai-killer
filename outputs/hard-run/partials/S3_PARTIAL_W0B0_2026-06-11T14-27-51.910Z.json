@@ -1,0 +1,22 @@
+{
+  "id": "S3:0.0",
+  "phase": "S3",
+  "worker": 0,
+  "batch": 0,
+  "timestamp": "2026-06-11T14:27:51.910Z",
+  "schema_version": "0",
+  "status": "ok",
+  "provenance": {
+    "produced_by": "S3",
+    "derived_from": [
+      "rubric:toy-hard-roman-rules"
+    ],
+    "timestamp": "2026-06-11T14:27:51.910Z",
+    "agent": "claude"
+  },
+  "payload": {
+    "id": "S3-roman-tablemap",
+    "origin": "requirement",
+    "approach": "to_roman: 降順の (値,記号) ペア表 [(1000,'M'),(900,'CM'),(500,'D'),(400,'CD'),(100,'C'),(90,'XC'),(50,'L'),(40,'XL'),(10,'X'),(9,'IX'),(5,'V'),(4,'IV'),(1,'I')] を貪欲に減算しながら連結。入口で bool を type(n) is not int で弾き TypeError、範囲外で ValueError。from_roman: str 型チェック後、正規表現 ^M{0,3}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})$ で標準形を一括検証し、空文字や非標準減算・連続4回・VLD重複を全て弾く。マッチしたら同じ表で左から走査し加算/減算して整数化。最後に to_roman(result)==s の往復検証で二重に保証。"
+  }
+}

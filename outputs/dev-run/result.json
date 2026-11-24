@@ -1,0 +1,13 @@
+{
+  "result_id": "dev-run",
+  "strategy_id": "S3-fizzbuzz-001",
+  "rubric_ref": "toy-fizzbuzz-rules",
+  "eval_mode": "test",
+  "score": 1,
+  "rank": 1,
+  "metrics": {
+    "passed_test_ratio": 1
+  },
+  "passed_test_ratio": 1,
+  "threshold": []
+}

@@ -1,0 +1,22 @@
+{
+  "id": "S3:0.2",
+  "phase": "S3",
+  "worker": 0,
+  "batch": 2,
+  "timestamp": "2026-06-11T13:31:57.993Z",
+  "schema_version": "0",
+  "status": "ok",
+  "provenance": {
+    "produced_by": "S3",
+    "derived_from": [
+      "rubric:toy-fizzbuzz-plus-rules"
+    ],
+    "timestamp": "2026-06-11T13:31:57.993Z",
+    "agent": "claude"
+  },
+  "payload": {
+    "id": "S3_strat_digit_helper",
+    "origin": "subject",
+    "approach": "桁判定を has_digit(n, d) ヘルパー（d in str(abs(n))）に切り出し、is_fizz = n%3==0 or has_digit(n,'3')、is_buzz = n%5==0 or has_digit(n,'5') で組み立てる。「桁に数字を含む」というひねり条件を再利用可能な補助関数に分離して可読性とテスト容易性を上げる。"
+  }
+}

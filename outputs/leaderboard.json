@@ -1,0 +1,272 @@
+[
+  {
+    "run_id": "dev-run",
+    "strategy_id": "S3-001",
+    "rubric_ref": "toy-fizzbuzz-rules",
+    "score": 1,
+    "passed_test_ratio": 1,
+    "result_ref": "outputs\\dev-run\\result.json",
+    "ts": "2026-06-11T12:48:47.143Z"
+  },
+  {
+    "run_id": "dev-run",
+    "strategy_id": "S3-001",
+    "rubric_ref": "toy-fizzbuzz-rules",
+    "score": 1,
+    "passed_test_ratio": 1,
+    "result_ref": "outputs\\dev-run\\result.json",
+    "ts": "2026-06-11T13:14:41.552Z"
+  },
+  {
+    "run_id": "fbp-run",
+    "strategy_id": "S3_strat_direct_modulo_substr",
+    "rubric_ref": "toy-fizzbuzz-plus-rules",
+    "score": 1,
+    "passed_test_ratio": 1,
+    "result_ref": "outputs\\fbp-run\\result.json",
+    "ts": "2026-06-11T13:32:06.170Z"
+  },
+  {
+    "run_id": "dev-run",
+    "strategy_id": "S3-001",
+    "rubric_ref": "toy-fizzbuzz-rules",
+    "score": 1,
+    "passed_test_ratio": 1,
+    "result_ref": "outputs\\dev-run\\result.json",
+    "ts": "2026-06-11T14:02:36.233Z"
+  },
+  {
+    "run_id": "hard-run",
+    "strategy_id": "S3-roman-tablemap",
+    "rubric_ref": "toy-hard-roman-rules",
+    "score": 1,
+    "passed_test_ratio": 1,
+    "result_ref": "outputs\\hard-run\\result.json",
+    "ts": "2026-06-11T14:28:11.922Z"
+  },
+  {
+    "run_id": "dev-run",
+    "strategy_id": "S3-001",
+    "rubric_ref": "toy-fizzbuzz-rules",
+    "score": 1,
+    "passed_test_ratio": 1,
+    "result_ref": "outputs\\dev-run\\result.json",
+    "ts": "2026-06-11T14:29:31.781Z"
+  },
+  {
+    "run_id": "dev-run",
+    "strategy_id": "S3-001",
+    "rubric_ref": "toy-fizzbuzz-rules",
+    "score": 1,
+    "passed_test_ratio": 1,
+    "result_ref": "outputs\\dev-run\\result.json",
+    "ts": "2026-06-11T14:46:40.780Z"
+  },
+  {
+    "run_id": "dev-run",
+    "strategy_id": "S3-fizzbuzz-001",
+    "rubric_ref": "toy-fizzbuzz-rules",
+    "score": 1,
+    "passed_test_ratio": 1,
+    "result_ref": "outputs\\dev-run\\result.json",
+    "ts": "2026-06-11T14:48:23.789Z"
+  },
+  {
+    "run_id": "js-run",
+    "strategy_id": "S3-stack-lifo",
+    "rubric_ref": "toy-js-parens-rules",
+    "score": 1,
+    "passed_test_ratio": 1,
+    "result_ref": "outputs\\js-run\\result.json",
+    "ts": "2026-06-11T14:58:41.693Z"
+  },
+  {
+    "run_id": "exp-run",
+    "strategy_id": "S3-001",
+    "rubric_ref": "toy-fizzbuzz-rules",
+    "score": 1,
+    "passed_test_ratio": 1,
+    "result_ref": "outputs\\exp-run\\result.json",
+    "ts": "2026-06-11T15:02:59.150Z"
+  },
+  {
+    "run_id": "exp-run",
+    "strategy_id": "S3-002",
+    "rubric_ref": "toy-fizzbuzz-rules",
+    "score": 1,
+    "passed_test_ratio": 1,
+    "result_ref": "outputs\\exp-run\\result.json",
+    "ts": "2026-06-11T15:03:04.126Z"
+  },
+  {
+    "run_id": "exp-run",
+    "strategy_id": "r1-S3-fizzbuzz-001",
+    "rubric_ref": "toy-fizzbuzz-rules",
+    "score": 1,
+    "passed_test_ratio": 1,
+    "result_ref": "outputs\\exp-run\\result.json",
+    "ts": "2026-06-11T15:04:13.250Z"
+  },
+  {
+    "run_id": "exp-run",
+    "strategy_id": "r1-S3-fizzbuzz-002",
+    "rubric_ref": "toy-fizzbuzz-rules",
+    "score": 1,
+    "passed_test_ratio": 1,
+    "result_ref": "outputs\\exp-run\\result.json",
+    "ts": "2026-06-11T15:04:18.103Z"
+  },
+  {
+    "run_id": "exp-run",
+    "strategy_id": "r2-S3_fizzbuzz_modulo_branch",
+    "rubric_ref": "toy-fizzbuzz-rules",
+    "score": 1,
+    "passed_test_ratio": 1,
+    "result_ref": "outputs\\exp-run\\result.json",
+    "ts": "2026-06-11T15:04:35.197Z"
+  },
+  {
+    "run_id": "exp-run",
+    "strategy_id": "r2-S3_fizzbuzz_string_accumulate",
+    "rubric_ref": "toy-fizzbuzz-rules",
+    "score": 1,
+    "passed_test_ratio": 1,
+    "result_ref": "outputs\\exp-run\\result.json",
+    "ts": "2026-06-11T15:04:39.269Z"
+  },
+  {
+    "run_id": "loop-run",
+    "strategy_id": "r1-S3-001",
+    "rubric_ref": "toy-fizzbuzz-rules",
+    "score": 1,
+    "passed_test_ratio": 1,
+    "result_ref": "outputs\\loop-run\\result.json",
+    "ts": "2026-06-12T15:26:03.881Z"
+  },
+  {
+    "run_id": "loop-run",
+    "strategy_id": "r1-S3-002",
+    "rubric_ref": "toy-fizzbuzz-rules",
+    "score": 1,
+    "passed_test_ratio": 1,
+    "result_ref": "outputs\\loop-run\\result.json",
+    "ts": "2026-06-12T15:26:07.821Z"
+  },
+  {
+    "run_id": "multi-run",
+    "strategy_id": "r1-S3-001",
+    "rubric_ref": "toy-multi-duration-rules",
+    "score": 1,
+    "passed_test_ratio": 1,
+    "result_ref": "outputs\\multi-run\\result.json",
+    "ts": "2026-06-12T16:40:23.134Z"
+  },
+  {
+    "run_id": "multi-run",
+    "strategy_id": "r1-S3-002",
+    "rubric_ref": "toy-multi-duration-rules",
+    "score": 1,
+    "passed_test_ratio": 1,
+    "result_ref": "outputs\\multi-run\\result.json",
+    "ts": "2026-06-12T16:40:49.145Z"
+  },
+  {
+    "run_id": "ac-verify",
+    "strategy_id": "S3-fizzbuzz-modulo",
+    "rubric_ref": "toy-fizzbuzz-rules",
+    "score": 1,
+    "passed_test_ratio": 1,
+    "result_ref": "outputs\\ac-verify\\result.json",
+    "ts": "2026-06-12T20:36:38.726Z"
+  },
+  {
+    "run_id": "ac5-verify",
+    "strategy_id": "S3-001",
+    "rubric_ref": "toy-fizzbuzz-rules",
+    "score": 1,
+    "passed_test_ratio": 1,
+    "result_ref": "outputs\\ac5-verify\\result.json",
+    "ts": "2026-06-12T21:03:10.688Z"
+  },
+  {
+    "run_id": "ac5-verify",
+    "strategy_id": "S3-001",
+    "rubric_ref": "toy-fizzbuzz-rules",
+    "score": 1,
+    "passed_test_ratio": 1,
+    "result_ref": "outputs\\ac5-verify\\result.json",
+    "ts": "2026-06-12T21:03:19.471Z"
+  },
+  {
+    "run_id": "ac5-verify",
+    "strategy_id": "S3-001",
+    "rubric_ref": "toy-fizzbuzz-rules",
+    "score": 1,
+    "passed_test_ratio": 1,
+    "result_ref": "outputs\\ac5-verify\\result.json",
+    "ts": "2026-06-12T21:04:24.517Z"
+  },
+  {
+    "run_id": "ac2-verify",
+    "strategy_id": "S3-req-even-first",
+    "rubric_ref": "toy-impossible-rules",
+    "score": 0.6666666666666666,
+    "passed_test_ratio": 0.6666666666666666,
+    "result_ref": "outputs\\ac2-verify\\result.json",
+    "ts": "2026-06-12T21:54:56.199Z"
+  },
+  {
+    "run_id": "janken-run",
+    "strategy_id": "beat-last",
+    "rubric_ref": "toy-janken-rules",
+    "score": 0.475,
+    "passed_test_ratio": 0.475,
+    "result_ref": "outputs\\janken-run\\result.json",
+    "ts": "2026-06-11T14:16:53.412Z"
+  },
+  {
+    "run_id": "..\\..\\AppData\\Local\\Temp\\tmp.qMlllOvG2X\\jk",
+    "strategy_id": "beat-last",
+    "rubric_ref": "toy-janken-rules",
+    "score": 0.475,
+    "passed_test_ratio": 0.475,
+    "result_ref": "C:\\Users\\shieru_k\\AppData\\Local\\Temp\\tmp.qMlllOvG2X\\jk\\result.json",
+    "ts": "2026-06-11T14:34:29.819Z"
+  },
+  {
+    "run_id": "janken-run",
+    "strategy_id": "cycle",
+    "rubric_ref": "toy-janken-rules",
+    "score": 0.175,
+    "passed_test_ratio": 0.175,
+    "result_ref": "outputs\\janken-run\\result.json",
+    "ts": "2026-06-11T14:16:53.413Z"
+  },
+  {
+    "run_id": "..\\..\\AppData\\Local\\Temp\\tmp.qMlllOvG2X\\jk",
+    "strategy_id": "cycle",
+    "rubric_ref": "toy-janken-rules",
+    "score": 0.175,
+    "passed_test_ratio": 0.175,
+    "result_ref": "C:\\Users\\shieru_k\\AppData\\Local\\Temp\\tmp.qMlllOvG2X\\jk\\result.json",
+    "ts": "2026-06-11T14:34:29.819Z"
+  },
+  {
+    "run_id": "janken-run",
+    "strategy_id": "always-rock",
+    "rubric_ref": "toy-janken-rules",
+    "score": 0.15,
+    "passed_test_ratio": 0.15,
+    "result_ref": "outputs\\janken-run\\result.json",
+    "ts": "2026-06-11T14:16:53.412Z"
+  },
+  {
+    "run_id": "..\\..\\AppData\\Local\\Temp\\tmp.qMlllOvG2X\\jk",
+    "strategy_id": "always-rock",
+    "rubric_ref": "toy-janken-rules",
+    "score": 0.15,
+    "passed_test_ratio": 0.15,
+    "result_ref": "C:\\Users\\shieru_k\\AppData\\Local\\Temp\\tmp.qMlllOvG2X\\jk\\result.json",
+    "ts": "2026-06-11T14:34:29.818Z"
+  }
+]

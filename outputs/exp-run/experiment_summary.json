@@ -1,0 +1,42 @@
+{
+  "run_id": "exp-run",
+  "rounds": 2,
+  "topK": 2,
+  "strategies_tried": 4,
+  "best": {
+    "strategy_id": "r1-S3-fizzbuzz-001",
+    "ratio": 1,
+    "attempts": 1
+  },
+  "threshold_experiment": "maxAttempts=1 でも ratio=1.000（3回と同等）→ 1回で十分",
+  "outcomes": [
+    {
+      "strategyId": "r1-S3-fizzbuzz-001",
+      "passed": true,
+      "ratio": 1,
+      "attempts": 1,
+      "maxAttempts": 3
+    },
+    {
+      "strategyId": "r1-S3-fizzbuzz-002",
+      "passed": true,
+      "ratio": 1,
+      "attempts": 1,
+      "maxAttempts": 3
+    },
+    {
+      "strategyId": "r2-S3_fizzbuzz_modulo_branch",
+      "passed": true,
+      "ratio": 1,
+      "attempts": 1,
+      "maxAttempts": 3
+    },
+    {
+      "strategyId": "r2-S3_fizzbuzz_string_accumulate",
+      "passed": true,
+      "ratio": 1,
+      "attempts": 1,
+      "maxAttempts": 3
+    }
+  ]
+}

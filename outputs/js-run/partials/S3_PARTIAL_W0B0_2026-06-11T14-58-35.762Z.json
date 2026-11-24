@@ -1,0 +1,22 @@
+{
+  "id": "S3:0.0",
+  "phase": "S3",
+  "worker": 0,
+  "batch": 0,
+  "timestamp": "2026-06-11T14:58:35.762Z",
+  "schema_version": "0",
+  "status": "ok",
+  "provenance": {
+    "produced_by": "S3",
+    "derived_from": [
+      "rubric:toy-js-parens-rules"
+    ],
+    "timestamp": "2026-06-11T14:58:35.762Z",
+    "agent": "claude"
+  },
+  "payload": {
+    "id": "S3-stack-lifo",
+    "origin": "requirement",
+    "approach": "標準的なスタック法。文字を走査し、開き括弧 ( [ { はスタックに push、閉じ括弧 ) ] } は (a) スタックが空なら false (閉じ余り)、(b) スタック頂上が対応する開き括弧でなければ false (順序崩れ) を判定し pop。括弧以外の文字は continue で無視。走査後スタックが空なら true、残っていれば false (開き余り)。閉じ→開きの対応は { ')':'(', ']':'[', '}':'{' } のマップで引く。"
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "files": [
+    {
+      "path": "SCORING_RUBRIC.json",
+      "bytes": 246,
+      "sha256": "30fdae489e0c16f1403d9dc0618f65791be9d3b7f597637f04b862be3b2b21e1"
+    },
+    {
+      "path": "TOURNAMENT_INFO.json",
+      "bytes": 217,
+      "sha256": "729b07ec873aba12e588d2ed6aa4c03cca6e873bf9b7d88d05791077b41669c8"
+    },
+    {
+      "path": "events/pipeline.jsonl",
+      "bytes": 539,
+      "sha256": "38964e85ffc3a347117f986c84238c8edcd9b3884b2f54408658ccfe59d2ab29"
+    },
+    {
+      "path": "package.json",
+      "bytes": 294,
+      "sha256": "0912f868a846601d575bcb43f5494ac8555f5a7029ba5e9d646e607741d4026d"
+    },
+    {
+      "path": "partials/S3_PARTIAL_W0B0_2026-06-11T14-58-35.762Z.json",
+      "bytes": 913,
+      "sha256": "d2f36d83a0d1910c0fc6428c6fae4038178e777d3908af3a33921c165d83e0a1"
+    },
+    {
+      "path": "partials/S3_PARTIAL_W0B1_2026-06-11T14-58-35.762Z.json",
+      "bytes": 810,
+      "sha256": "a9ea582b9ae377f5fc5a4defc834fe8886ed98906b6b8225545b1c190e3f35f9"
+    },
+    {
+      "path": "partials/S3_PARTIAL_W0B2_2026-06-11T14-58-35.763Z.json",
+      "bytes": 784,
+      "sha256": "57a607294280032c2c2a778371b3bc9e8773d11eb9a52d526dc959d2bc5b978c"
+    },
+    {
+      "path": "partials/S5_PARTIAL_W0B1_2026-06-11T14-58-41.602Z.json",
+      "bytes": 501,
+      "sha256": "e96d2118adb0b81dbb96fdf97f8a6018b3801c2035ef17bef344f69dbad8ffc3"
+    },
+    {
+      "path": "projects/S3-stack-lifo/manifest.json",
+      "bytes": 147,
+      "sha256": "fc35df42aad8e25205cb7c5277d0254323cfc280f4663ac6e9fecd24dfc94e42"
+    },
+    {
+      "path": "projects/S3-stack-lifo/package.json",
+      "bytes": 19,
+      "sha256": "fa6944a20ca5e6fbaf98fd202eb8c7004d5b4ab786e36b9ed02ee31dbe196c9f"
+    },
+    {
+      "path": "projects/S3-stack-lifo/src/main.js",
+      "bytes": 446,
+      "sha256": "fa4be60d0ade86c8471b027b8c1735879504db69c7dbedfc1c0a78899979bbc4"
+    },
+    {
+      "path": "projects/S3-stack-lifo/tests/test.js",
+      "bytes": 3490,
+      "sha256": "4e9e6ca3be5a617e0ad50584f7a7dd325c93bd926dbdce82955a0ca327ea95c6"
+    },
+    {
+      "path": "result.json",
+      "bytes": 242,
+      "sha256": "c6230e8cbbd5ec4f382f610ab7d71d356a4905ff34db920dbce483a994dbff06"
+    },
+    {
+      "path": "spec.md",
+      "bytes": 1710,
+      "sha256": "77973fd77125bd943407f335eda152c4fc48aa1e614404a3d6adf9180a13a8f4"
+    },
+    {
+      "path": "tests/test.js",
+      "bytes": 3490,
+      "sha256": "4e9e6ca3be5a617e0ad50584f7a7dd325c93bd926dbdce82955a0ca327ea95c6"
+    }
+  ],
+  "file_count": 15,
+  "total_bytes": 13848,
+  "manifest_sha256": "898f6e352a70997ea149c9eebce07d51364794014a2ade5dd91792fe7070a6a1"
+}

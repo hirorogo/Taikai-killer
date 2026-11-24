@@ -1,0 +1,17 @@
+{
+  "run_id": "loop-run",
+  "rounds_run": 1,
+  "strategies_tried": 2,
+  "strongest": {
+    "strategyId": "r1-S3-001",
+    "approach": "順次 if 分岐。n % 15 == 0 を最初に判定して \"FizzBuzz\"、次に n % 3 == 0 で \"Fizz\"、n % 5 == 0 で \"Buzz\"、どれでもなければ str(n) を返す。仕様の優先順位を分岐順で素直に表現する最小実装。",
+    "ratio": 1
+  },
+  "progression": [
+    {
+      "round": 1,
+      "best_ratio": 1,
+      "strongest": "r1-S3-001"
+    }
+  ]
+}

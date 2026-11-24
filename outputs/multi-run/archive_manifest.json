@@ -1,0 +1,92 @@
+{
+  "files": [
+    {
+      "path": "SCORING_RUBRIC.json",
+      "bytes": 251,
+      "sha256": "f79beec21ad43134d1dd1f4ea3e660effa812ee8ec4026956e45716e2641c434"
+    },
+    {
+      "path": "TOURNAMENT_INFO.json",
+      "bytes": 237,
+      "sha256": "bfcf2777f08979a515b39b738b0f84efeb409221d43cbdafb6306cfbb81f4882"
+    },
+    {
+      "path": "events/pipeline.jsonl",
+      "bytes": 165,
+      "sha256": "b11b6ebff9a6e824c1386fef825c1dfa71dd46150c641bd1bd157e5ee77a76e9"
+    },
+    {
+      "path": "loop_summary.json",
+      "bytes": 978,
+      "sha256": "4d743d4b79fb60715b15d1abe81fde3d4c7adb47db3c3af30e7b2c2f3412d5f6"
+    },
+    {
+      "path": "partials/S5_PARTIAL_W0B1_2026-06-12T16-40-23.057Z.json",
+      "bytes": 497,
+      "sha256": "e7e3a6e68d0eefbc37b47018a6895f2b84966d302893fa28432a597bd4086d97"
+    },
+    {
+      "path": "partials/S5_PARTIAL_W1B1_2026-06-12T16-40-49.096Z.json",
+      "bytes": 497,
+      "sha256": "3fa241219c54e63afce495f32cde23af9ccc0667543107b44363ebda24e891ce"
+    },
+    {
+      "path": "projects/r1-S3-001/manifest.json",
+      "bytes": 162,
+      "sha256": "c02a02a8d1246e37162f5e313ee14f7cf92e00f820ddff1cc9e853e485b61777"
+    },
+    {
+      "path": "projects/r1-S3-001/src/__pycache__/main.cpython-312.pyc",
+      "bytes": 2519,
+      "sha256": "4556b243bfe66f3cbbbd821be5a41a6f2d9a11b83e5c1522e183332fb93c8460"
+    },
+    {
+      "path": "projects/r1-S3-001/src/main.py",
+      "bytes": 1781,
+      "sha256": "86981c8df6c607dad07c1f0fa7117959c829ccfc5f48703822c9dd4b78390b25"
+    },
+    {
+      "path": "projects/r1-S3-001/tests/test_duration.py",
+      "bytes": 6722,
+      "sha256": "8293193a8ee91917fb565d62a00b355261f7ec34aecee48827544454b605bdc7"
+    },
+    {
+      "path": "projects/r1-S3-002/manifest.json",
+      "bytes": 162,
+      "sha256": "c02a02a8d1246e37162f5e313ee14f7cf92e00f820ddff1cc9e853e485b61777"
+    },
+    {
+      "path": "projects/r1-S3-002/src/__pycache__/main.cpython-312.pyc",
+      "bytes": 2904,
+      "sha256": "67ab92546ff5909dc7d51a2261f6bdd1efce049ba9351e2883268c55a78bc51a"
+    },
+    {
+      "path": "projects/r1-S3-002/src/main.py",
+      "bytes": 1979,
+      "sha256": "0ae1118d3cfc1a3e56cf0e9b5408bc133757006ba8348225721535565eb2dca6"
+    },
+    {
+      "path": "projects/r1-S3-002/tests/test_duration.py",
+      "bytes": 6722,
+      "sha256": "8293193a8ee91917fb565d62a00b355261f7ec34aecee48827544454b605bdc7"
+    },
+    {
+      "path": "result.json",
+      "bytes": 249,
+      "sha256": "19605ef39edd518f044bd724fdee40d0dd1bc51b0d7ec468d2c6621c72b985ce"
+    },
+    {
+      "path": "spec.md",
+      "bytes": 3690,
+      "sha256": "6a49b96faaf3e0970a1fb4a808303fc1c4c4b5fae8704a5755817c2929406ff8"
+    },
+    {
+      "path": "tests/test_duration.py",
+      "bytes": 6722,
+      "sha256": "8293193a8ee91917fb565d62a00b355261f7ec34aecee48827544454b605bdc7"
+    }
+  ],
+  "file_count": 17,
+  "total_bytes": 36237,
+  "manifest_sha256": "329044a6dfef747cd88d194a74ced6124779aa2af4f79c43dd9b4411a9833513"
+}

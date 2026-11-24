@@ -1,0 +1,22 @@
+{
+  "id": "S3:0.0",
+  "phase": "S3",
+  "worker": 0,
+  "batch": 0,
+  "timestamp": "2026-06-11T13:31:57.992Z",
+  "schema_version": "0",
+  "status": "ok",
+  "provenance": {
+    "produced_by": "S3",
+    "derived_from": [
+      "rubric:toy-fizzbuzz-plus-rules"
+    ],
+    "timestamp": "2026-06-11T13:31:57.992Z",
+    "agent": "claude"
+  },
+  "payload": {
+    "id": "S3_strat_direct_modulo_substr",
+    "origin": "requirement",
+    "approach": "Fizz条件 = (n % 3 == 0) or ('3' in str(n))、Buzz条件 = (n % 5 == 0) or ('5' in str(n)) を直接ブール変数 fizz/buzz として計算。両方Trueなら'FizzBuzz'、fizzのみ'Fizz'、buzzのみ'Buzz'、どちらもFalseなら str(n) を返す。最も仕様に忠実な素直実装。"
+  }
+}

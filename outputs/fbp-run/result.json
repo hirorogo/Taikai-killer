@@ -1,0 +1,13 @@
+{
+  "result_id": "fbp-run",
+  "strategy_id": "S3_strat_direct_modulo_substr",
+  "rubric_ref": "toy-fizzbuzz-plus-rules",
+  "eval_mode": "test",
+  "score": 1,
+  "rank": 1,
+  "metrics": {
+    "passed_test_ratio": 1
+  },
+  "passed_test_ratio": 1,
+  "threshold": []
+}

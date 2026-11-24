@@ -1,0 +1,22 @@
+{
+  "id": "S3:0.1",
+  "phase": "S3",
+  "worker": 0,
+  "batch": 1,
+  "timestamp": "2026-06-11T14:58:35.762Z",
+  "schema_version": "0",
+  "status": "ok",
+  "provenance": {
+    "produced_by": "S3",
+    "derived_from": [
+      "rubric:toy-js-parens-rules"
+    ],
+    "timestamp": "2026-06-11T14:58:35.762Z",
+    "agent": "claude"
+  },
+  "payload": {
+    "id": "S3-pair-map-push",
+    "origin": "requirement",
+    "approach": "開き括弧→期待する閉じ括弧のマップ { '(':')', '[':']', '{':'}' } を使う変種。開き括弧なら対応する閉じ括弧を expected スタックに push、閉じ括弧なら stack.pop() と一致するか比較 (不一致/空で false)。括弧以外は無視。最後に stack.length===0 を返す。空文字列・記号混在は自然に true になる。"
+  }
+}

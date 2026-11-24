@@ -1,0 +1,7 @@
+{
+  "language": "node",
+  "entrypoint": "src/main.js",
+  "run_cmd": "node src/main.js",
+  "test_cmd": "node tests/test.js",
+  "timeout_ms": 60000
+}

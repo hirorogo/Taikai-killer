@@ -1,0 +1,7 @@
+{
+  "language": "python",
+  "entrypoint": "src/main.py",
+  "run_cmd": "python src/main.py",
+  "test_cmd": "python tests/test_fbp.py",
+  "timeout_ms": 60000
+}

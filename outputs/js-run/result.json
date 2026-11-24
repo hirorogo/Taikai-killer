@@ -1,0 +1,13 @@
+{
+  "result_id": "js-run",
+  "strategy_id": "S3-stack-lifo",
+  "rubric_ref": "toy-js-parens-rules",
+  "eval_mode": "test",
+  "score": 1,
+  "rank": 1,
+  "metrics": {
+    "passed_test_ratio": 1
+  },
+  "passed_test_ratio": 1,
+  "threshold": []
+}

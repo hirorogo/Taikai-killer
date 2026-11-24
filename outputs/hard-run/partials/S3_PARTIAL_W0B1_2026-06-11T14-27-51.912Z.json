@@ -1,0 +1,22 @@
+{
+  "id": "S3:0.1",
+  "phase": "S3",
+  "worker": 0,
+  "batch": 1,
+  "timestamp": "2026-06-11T14:27:51.912Z",
+  "schema_version": "0",
+  "status": "ok",
+  "provenance": {
+    "produced_by": "S3",
+    "derived_from": [
+      "rubric:toy-hard-roman-rules"
+    ],
+    "timestamp": "2026-06-11T14:27:51.912Z",
+    "agent": "claude"
+  },
+  "payload": {
+    "id": "S3-roman-roundtrip-guard",
+    "origin": "subject",
+    "approach": "from_roman を「緩くパースして往復検証で正準性を担保」する方針。まず文字集合が {I,V,X,L,C,D,M} のみか確認し、各記号の値を左→右で見て『次の記号が自分より大きければ減算、そうでなければ加算』の古典アルゴリズムで暫定整数 v を計算。途中で 1..3999 を外れたら ValueError。最後に to_roman(v) を再生成し s と完全一致しなければ ValueError（IIII/IL/IXI/VIV/XM 等の非標準形はここで全て排除される）。to_roman は標準の貪欲テーブル法。検証ロジックを to_roman 側に一元化することで規則の二重実装を避け、ラウンドトリップ不変条件を構造的に満たす。"
+  }
+}

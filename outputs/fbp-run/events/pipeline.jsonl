@@ -1,0 +1,4 @@
+{"type":"PipelineStarted","run_id":"fbp-run","ts":"2026-06-11T13:31:42.178Z"}
+{"type":"PhaseCompleted","phase":"S3","status":"ok","ts":"2026-06-11T13:31:58.004Z"}
+{"type":"PhaseCompleted","phase":"S5","status":"ok","ts":"2026-06-11T13:32:06.122Z"}
+{"type":"PhaseCompleted","phase":"S6","status":"ok","ts":"2026-06-11T13:32:06.170Z"}

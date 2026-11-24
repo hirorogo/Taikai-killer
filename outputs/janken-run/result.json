@@ -1,0 +1,25 @@
+{
+  "result_id": "janken-run:beat-last",
+  "strategy_id": "beat-last",
+  "rubric_ref": "toy-janken-rules",
+  "eval_mode": "battle",
+  "score": 0.475,
+  "rank": 1,
+  "metrics": {
+    "win_rate": 0.475
+  },
+  "win_rate": 0.475,
+  "battle": {
+    "opponents": [
+      "always-rock",
+      "cycle"
+    ],
+    "record": {
+      "wins": 19,
+      "losses": 0,
+      "draws": 21
+    },
+    "format": "round_robin"
+  },
+  "threshold": []
+}

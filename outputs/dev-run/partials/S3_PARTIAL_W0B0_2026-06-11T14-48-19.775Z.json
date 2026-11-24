@@ -1,0 +1,22 @@
+{
+  "id": "S3:0.0",
+  "phase": "S3",
+  "worker": 0,
+  "batch": 0,
+  "timestamp": "2026-06-11T14:48:19.775Z",
+  "schema_version": "0",
+  "status": "ok",
+  "provenance": {
+    "produced_by": "S3",
+    "derived_from": [
+      "rubric:toy-fizzbuzz-rules"
+    ],
+    "timestamp": "2026-06-11T14:48:19.775Z",
+    "agent": "claude"
+  },
+  "payload": {
+    "id": "S3-fizzbuzz-001",
+    "origin": "requirement",
+    "approach": "順次条件分岐。3と5両方の倍数(n%15==0)を最初に判定して\"FizzBuzz\"、次にn%3==0で\"Fizz\"、n%5==0で\"Buzz\"、いずれも外れたらstr(n)を返す。仕様の境界条件を素直に網羅する最小実装。"
+  }
+}

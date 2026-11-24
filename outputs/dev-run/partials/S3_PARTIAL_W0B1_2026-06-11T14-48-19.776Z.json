@@ -1,0 +1,22 @@
+{
+  "id": "S3:0.1",
+  "phase": "S3",
+  "worker": 0,
+  "batch": 1,
+  "timestamp": "2026-06-11T14:48:19.776Z",
+  "schema_version": "0",
+  "status": "ok",
+  "provenance": {
+    "produced_by": "S3",
+    "derived_from": [
+      "rubric:toy-fizzbuzz-rules"
+    ],
+    "timestamp": "2026-06-11T14:48:19.776Z",
+    "agent": "claude"
+  },
+  "payload": {
+    "id": "S3-fizzbuzz-002",
+    "origin": "requirement",
+    "approach": "倍数フラグを文字列連結で組み立てる。result=\"\"に対しn%3==0なら\"Fizz\"、n%5==0なら\"Buzz\"を追記し、resultが空ならstr(n)を返す。FizzBuzzケースを特別扱いせず自然に導出でき、条件の重複を排除。"
+  }
+}

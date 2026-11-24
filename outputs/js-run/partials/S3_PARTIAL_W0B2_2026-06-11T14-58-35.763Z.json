@@ -1,0 +1,22 @@
+{
+  "id": "S3:0.2",
+  "phase": "S3",
+  "worker": 0,
+  "batch": 2,
+  "timestamp": "2026-06-11T14:58:35.763Z",
+  "schema_version": "0",
+  "status": "ok",
+  "provenance": {
+    "produced_by": "S3",
+    "derived_from": [
+      "rubric:toy-js-parens-rules"
+    ],
+    "timestamp": "2026-06-11T14:58:35.763Z",
+    "agent": "claude"
+  },
+  "payload": {
+    "id": "S3-filter-then-scan",
+    "origin": "subject",
+    "approach": "前処理として題材の例 (\"a(b)c\", \"{ key: [1, 2] }\") を踏まえ、まず括弧6種以外を正規表現 /[^()\\[\\]{}]/g で除去してから単純なスタック照合を行う2段構成。無視ロジックと照合ロジックを分離して可読性とテスト容易性を上げる。空文字列は除去後も空配列となり true。"
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "id": "S6:0.2",
+  "phase": "S6",
+  "worker": 0,
+  "batch": 2,
+  "timestamp": "2026-06-11T14:16:53.410Z",
+  "schema_version": "0",
+  "status": "ok",
+  "provenance": {
+    "produced_by": "S6",
+    "derived_from": [
+      "cycle"
+    ],
+    "timestamp": "2026-06-11T14:16:53.410Z",
+    "agent": "claude"
+  },
+  "payload": {
+    "result_id": "janken-run:cycle",
+    "strategy_id": "cycle",
+    "rubric_ref": "toy-janken-rules",
+    "eval_mode": "battle",
+    "score": 0.175,
+    "rank": 2,
+    "metrics": {
+      "win_rate": 0.175
+    },
+    "win_rate": 0.175,
+    "battle": {
+      "opponents": [
+        "always-rock",
+        "beat-last"
+      ],
+      "record": {
+        "wins": 7,
+        "losses": 6,
+        "draws": 27
+      },
+      "format": "round_robin"
+    },
+    "threshold": []
+  }
+}

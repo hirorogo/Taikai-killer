@@ -1,0 +1,13 @@
+{
+  "result_id": "loop-run-r1",
+  "strategy_id": "r1-S3-001",
+  "rubric_ref": "toy-fizzbuzz-rules",
+  "eval_mode": "test",
+  "score": 1,
+  "rank": 1,
+  "metrics": {
+    "passed_test_ratio": 1
+  },
+  "passed_test_ratio": 1,
+  "threshold": []
+}
